@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "mechgirls-app",
+    "slug": "mechgirls-app",
+    "version": "1.0.0",
+    "userInterfaceStyle": "light",
+    "scheme": "mechgirls",
+    "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "mechgirls"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "ios": {
+      "bundleIdentiier": "com.mechgirls.app"
+    }
+  }
+}
