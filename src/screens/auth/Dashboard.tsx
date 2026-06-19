@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  FlatList, ActivityIndicator, RefreshControl, Image, Modal, Linking,
+  FlatList, ActivityIndicator, RefreshControl, Image, Modal, Linking, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 
 interface ArchivoAdjunto {
@@ -53,6 +54,7 @@ export default function Dashboard({ navigation }: any) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const { usuario } = useAuth();
+  const isGuest = useAuthStore(s => s.esInvitado)();
   const channelRef = useRef<any>(null);
 
   const unreadCount = notifs.filter(n => !n.leida).length;
@@ -150,7 +152,13 @@ export default function Dashboard({ navigation }: any) {
   };
 
   const handleLike = async (post: PostItem) => {
-    const nuevoEstado = !post.usuario_dio_like;
+    if (isGuest) {
+      Alert.alert('Necesitas una cuenta', 'Regístrate para dar like a publicaciones.');
+      return;
+    }
+    
+    const nuevoEstado = !post.usuario_dio_like; 
+    
     setPosts(prev => prev.map(p =>
       p.id === post.id ? { ...p, usuario_dio_like: nuevoEstado, likes: p.likes + (nuevoEstado ? 1 : -1) } : p
     ));

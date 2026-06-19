@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 
 interface Evento {
@@ -391,6 +392,7 @@ function parseFechaLocal(fechaStr: string): string {
 
 export default function TalleresScreen({navigation}: any) {
   const { usuario, esAdmin } = useAuth();
+  const isGuest = useAuthStore(s => s.esInvitado)();
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [filtrados, setFiltrados] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(true);
@@ -462,6 +464,10 @@ export default function TalleresScreen({navigation}: any) {
   const horasCursadas = eventos.filter(e => e.usuario_inscrito).reduce((a, e) => a + e.duracion_horas, 0);
 
   const handleInscribirse = async (evento: Evento) => {
+    if (isGuest) {
+      Alert.alert('Necesitas una cuenta', 'Regístrate para inscribirte a eventos.');
+      return;
+    }
     if (evento.total_inscritos >= evento.cupo_maximo) { Alert.alert('Cupo lleno', 'No hay lugares.'); return; }
     try {
       const { data: existente } = await supabase.from('inscripciones').select('id_inscripcion, estado').eq('id_evento', evento.id_evento).eq('id_usuario', usuario!.id_usuario).maybeSingle();
@@ -575,9 +581,11 @@ export default function TalleresScreen({navigation}: any) {
             <Feather name="users" size={14} color={Colors.primary} />
             <Text style={styles.btnPonentesText}>Ponentes</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btnNuevo} onPress={() => { resetForm(); setModalCrear(true); }}>
-            <Text style={styles.btnNuevoText}>+ Nuevo</Text>
-          </TouchableOpacity>
+          {esAdmin && esAdmin() && (
+            <TouchableOpacity style={styles.btnNuevo} onPress={() => { resetForm(); setModalCrear(true); }}>
+              <Text style={styles.btnNuevoText}>+ Nuevo</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 
 interface Comentario {
@@ -23,6 +24,7 @@ interface Comentario {
 export default function ComentariosScreen({ route, navigation }: any) {
   const { publicacion } = route.params;
   const { usuario } = useAuth();
+  const isGuest = useAuthStore(s => s.esInvitado)();
    const insets = useSafeAreaInsets();
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,8 +184,15 @@ export default function ComentariosScreen({ route, navigation }: any) {
           />
         )}
 
+        {isGuest ? (
+          <View style={[styles.inputArea, { paddingBottom: insets.bottom > 0 ? insets.bottom : 12, justifyContent: 'center' }]}>
+            <Text style={{ color: '#9E9E9E', textAlign: 'center', fontSize: 13 }}>
+              Regístrate para dejar un comentario
+            </Text>
+          </View>
+        ) : (
         <View style={[
-  styles.inputArea, 
+  styles.inputArea,
   { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 }
 ]}>
   <View style={styles.avatarXs}>
@@ -214,6 +223,7 @@ export default function ComentariosScreen({ route, navigation }: any) {
     }
   </TouchableOpacity>
 </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

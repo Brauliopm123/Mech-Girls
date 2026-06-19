@@ -10,6 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { decode } from 'base64-arraybuffer';
 
 const CATEGORIES = [
@@ -36,6 +37,19 @@ function getInitialState() {
 
 export default function CrearPublicacionScreen() {
   const { usuario } = useAuth();
+  const isGuest = useAuthStore(s => s.esInvitado)();
+
+  if (isGuest) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 16, color: '#757575', textAlign: 'center' }}>
+            Necesitas una cuenta para crear publicaciones.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');

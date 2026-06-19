@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -27,6 +28,8 @@ interface Ponente {
 
 export default function PonentesScreen({ navigation }: any) {
   const { usuario } = useAuth();
+  const isAdmin = useAuthStore(s => s.esAdmin)();
+  const isGuest = useAuthStore(s => s.esInvitado)();
   const [ponentes, setPonentes] = useState<Ponente[]>([]);
   const [filtrados, setFiltrados] = useState<Ponente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,23 +90,35 @@ export default function PonentesScreen({ navigation }: any) {
     }
     setGuardandoNuevo(true);
     try {
-      const { data, error } = await supabase.rpc('fn_registrar_usuario', {
-        p_correo: nuevoCorreo.trim().toLowerCase(),
-        p_contrasena: 'MechGirls2025!', // contraseña temporal
-        p_nombre: nuevoNombre.trim(),
-        p_apellidos: nuevoApellidos.trim(),
-        p_id_rol: 2,
-      });
-      if (error) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Sin sesión activa');
 
-      const id_usuario = data?.[0]?.id_usuario;
-      if (id_usuario && (nuevoEspecialidad || nuevoEmpresa)) {
-        await supabase.from('perfiles_ponente')
-          .update({ especialidad: nuevoEspecialidad || null, empresa_institucion: nuevoEmpresa || null })
-          .eq('id_usuario', id_usuario);
-      }
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/create-ponente`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            correo:      nuevoCorreo.trim().toLowerCase(),
+            nombre:      nuevoNombre.trim(),
+            apellidos:   nuevoApellidos.trim(),
+            especialidad: nuevoEspecialidad.trim() || null,
+            empresa:     nuevoEmpresa.trim() || null,
+          }),
+        }
+      );
 
-      Alert.alert('¡Ponente creada!', `Contraseña temporal: MechGirls2025!\nSe recomienda cambiarla al iniciar sesión.`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Error al crear ponente');
+
+      Alert.alert(
+        '¡Ponente creada!',
+        'Se envió un correo para que establezca su contraseña.'
+      );
       setModalNuevo(false);
       setNuevoNombre(''); setNuevoApellidos(''); setNuevoCorreo('');
       setNuevoEspecialidad(''); setNuevoEmpresa('');
@@ -179,9 +194,11 @@ export default function PonentesScreen({ navigation }: any) {
               <Text style={styles.btnSemblanzaText}>Mi semblanza</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.btnNuevo} onPress={() => setModalNuevo(true)}>
-            <Feather name="plus" size={16} color="#FFF" />
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity style={styles.btnNuevo} onPress={() => setModalNuevo(true)}>
+              <Feather name="plus" size={16} color="#FFF" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -244,7 +261,7 @@ export default function PonentesScreen({ navigation }: any) {
             <Text style={styles.inputLabel}>Empresa / Institución</Text>
             <TextInput style={styles.textInput} value={nuevoEmpresa} onChangeText={setNuevoEmpresa} placeholder="UTEQ" placeholderTextColor="#9E9E9E" />
             <Text style={[styles.inputLabel, { color: '#9E9E9E', marginTop: 16 }]}>
-              Se creará una cuenta con contraseña temporal: MechGirls2025!
+              Se enviará un correo al ponente para que establezca su contraseña.
             </Text>
             <TouchableOpacity
               style={[styles.btnGuardar, guardandoNuevo && styles.btnDisabled]}
