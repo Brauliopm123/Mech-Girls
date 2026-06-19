@@ -1,18 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
 import { Colors } from '../constants/colors';
 
-
 const linking = {
   prefixes: ['mechgirls://'],
   config: {
     screens: {
-      // Mapea la ruta del deep link a la pantalla
       ResetPassword: {
         path: 'reset-password',
         parse: {
@@ -26,8 +24,18 @@ const linking = {
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [limpiando, setLimpiando] = useState(true);
 
-  if (isLoading) {
+  useEffect(() => {
+    // Limpiar sesión vieja del sistema bcrypt anterior
+    // Este bloque se puede eliminar después de que todos los usuarios
+    // hayan iniciado sesión al menos una vez con el nuevo sistema
+    AsyncStorage.removeItem('mechgirls_session').finally(() => {
+      setLimpiando(false);
+    });
+  }, []);
+
+  if (isLoading || limpiando) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -37,7 +45,6 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer linking={linking}>
-      {/* LA MAGIA SUCEDE AQUÍ */}
       {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );

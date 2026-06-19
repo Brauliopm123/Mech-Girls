@@ -34,35 +34,33 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ usuario: null, isAuthenticated: false }),
 
   inicializar: async () => {
-    set({ isLoading: true });
-
-    // Restaurar sesión existente al arrancar la app
+    // Siempre terminar en isLoading: false pase lo que pase
     try {
       const usuario = await AuthService.getSesionActiva();
       set({ usuario, isAuthenticated: !!usuario, isLoading: false });
     } catch {
       set({ usuario: null, isAuthenticated: false, isLoading: false });
+    } finally {
+      // Garantía extra — si algo arriba falla silenciosamente
+      set((state) => state.isLoading ? { isLoading: false } : state);
     }
 
-    // Escuchar cambios de sesión (login, logout, token refresh, password reset)
+    // Suscribirse a cambios de sesión
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-
         if (event === 'SIGNED_OUT' || !session) {
-          // No limpiar si está en modo invitado (id_rol 0 no tiene sesión real)
           if (get().usuario?.id_rol !== 0) {
             set({ usuario: null, isAuthenticated: false });
           }
           return;
         }
 
-        // En cualquier evento con sesión activa: refrescar usuario desde BD
         if (['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) {
           try {
             const usuario = await AuthService.getSesionActiva();
             if (usuario) set({ usuario, isAuthenticated: true });
           } catch {
-            // Mantener estado actual si falla el fetch
+            // Mantener estado actual
           }
         }
       }
