@@ -2,12 +2,19 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
   FlatList, Alert, Share, ActivityIndicator,
-  RefreshControl, Modal, TextInput, ScrollView, Image
+  RefreshControl, Modal, TextInput, ScrollView, Image, Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../services/supabase';
+
+interface ArchivoAdjunto {
+  id: number;
+  url: string;
+  tipo: 'imagen' | 'archivo';
+  nombre: string | null;
+}
 
 interface PostItem {
   id: number;
@@ -15,6 +22,8 @@ interface PostItem {
   tag: string;
   created_at: string;
   url_referencia: string | null;
+  link_url: string | null;
+  archivos: ArchivoAdjunto[];
   likes: number;
   comments: number;
   usuario_dio_like: boolean;
@@ -170,6 +179,32 @@ export default function PerfilScreen({ navigation }: any) {
     ]);
   };
 
+  const abrirUrl = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      console.log('No se pudo abrir la URL:', url);
+    }
+  };
+
+  const nombreArchivoDesdeUrl = (url: string) => {
+    try {
+      const parte = url.split('/').pop() ?? 'archivo';
+      return decodeURIComponent(parte.split('?')[0]);
+    } catch {
+      return 'archivo';
+    }
+  };
+
+  const formatearLink = (url: string) => {
+    try {
+      const u = new URL(url);
+      return u.hostname.replace('www.', '');
+    } catch {
+      return url;
+    }
+  };
+
   const renderPost = ({ item }: { item: PostItem }) => (
     <View style={styles.card}>
       <View style={styles.postHeader}>
@@ -184,7 +219,46 @@ export default function PerfilScreen({ navigation }: any) {
         </View>
       </View>
       <Text style={styles.postContent}>{item.content}</Text>
-      {item.url_referencia && (
+
+      {item.archivos?.filter(a => a.tipo === 'imagen').map(img => (
+        <Image key={img.id} source={{ uri: img.url }} style={styles.postImage} resizeMode="cover" />
+      ))}
+
+      {item.archivos?.filter(a => a.tipo === 'archivo').map(arch => (
+        <TouchableOpacity
+          key={arch.id}
+          style={styles.fileCard}
+          onPress={() => abrirUrl(arch.url)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.fileIconWrapper}>
+            <Feather name="file-text" size={18} color="#1976D2" />
+          </View>
+          <Text style={styles.fileCardText} numberOfLines={1}>
+            {arch.nombre || nombreArchivoDesdeUrl(arch.url)}
+          </Text>
+          <Feather name="download" size={16} color="#9E9E9E" />
+        </TouchableOpacity>
+      ))}
+
+      {item.link_url && (
+        <TouchableOpacity
+          style={styles.linkCard}
+          onPress={() => abrirUrl(item.link_url!)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.linkIconWrapper}>
+            <Feather name="link" size={18} color="#388E3C" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkCardHost} numberOfLines={1}>{formatearLink(item.link_url)}</Text>
+            <Text style={styles.linkCardUrl} numberOfLines={1}>{item.link_url}</Text>
+          </View>
+          <Feather name="external-link" size={16} color="#9E9E9E" />
+        </TouchableOpacity>
+      )}
+
+      {!item.archivos?.length && !item.link_url && item.url_referencia && (
         <Image source={{ uri: item.url_referencia }} style={styles.postImage} resizeMode="cover" />
       )}
       <View style={styles.postFooter}>
@@ -379,6 +453,13 @@ const styles = StyleSheet.create({
   postDate: { fontSize: 11, color: '#9E9E9E', marginTop: 2 },
   postContent: { fontSize: 14, color: '#424242', lineHeight: 20, marginBottom: 12 },
   postImage: { width: '100%', height: 180, borderRadius: 12, marginBottom: 12 },
+  fileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E3F2FD', borderWidth: 1, borderColor: '#BBDEFB', borderRadius: 12, padding: 12, marginBottom: 12 },
+  fileIconWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  fileCardText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#1976D2', marginRight: 8 },
+  linkCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', borderWidth: 1, borderColor: '#C8E6C9', borderRadius: 12, padding: 12, marginBottom: 12 },
+  linkIconWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  linkCardHost: { fontSize: 13, fontWeight: '700', color: '#388E3C' },
+  linkCardUrl: { fontSize: 11, color: '#558B2F', marginTop: 1 },
   postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
   interactionGroup: { flexDirection: 'row', alignItems: 'center' },
   interactionRow: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },

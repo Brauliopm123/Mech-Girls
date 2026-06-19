@@ -47,6 +47,8 @@ export default function CrearPublicacionScreen() {
   const [isLinkModalVisible, setLinkModalVisible] = useState(false);
   const [tempLink, setTempLink] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState('');
 
   const isValid = content.trim().length > 0;
 
@@ -59,6 +61,8 @@ export default function CrearPublicacionScreen() {
     setFile(null);
     setLink('');
     setTempLink('');
+    setIsAddingTag(false);
+    setNewTag('');
   };
 
   const pickImage = async () => {
@@ -141,30 +145,39 @@ export default function CrearPublicacionScreen() {
     setIsUploading(true);
 
     try {
-      let imageUrl = null;
-      let fileUrl = null;
+      let imageUrl: string | null = null;
+      let fileUrl: string | null = null;
 
       if (image) imageUrl = await uploadToStorage(image, 'imagenes');
       if (file) fileUrl = await uploadToStorage(file, 'archivos');
 
-      const urlFinal = imageUrl || fileUrl || link || null;
+      const linkFinal = link.trim() || null;
 
-      let descripcionUrl = null;
-      if (link) descripcionUrl = 'Enlace adjunto';
-      else if (imageUrl) descripcionUrl = 'Imagen adjunta';
-      else if (fileUrl) descripcionUrl = 'Archivo adjunto';
-
-      const { error } = await supabase.from('publicaciones').insert([
+      const { data: pubData, error } = await supabase.from('publicaciones').insert([
         {
           id_usuario: userId,
           contenido_texto: content.trim(),
           tipo_publicacion: category.toLowerCase(),
-          url_referencia: urlFinal,
-          descripcion_url: descripcionUrl,
+          link_url: linkFinal,
         }
-      ]);
+      ]).select('id_publicacion').single();
 
       if (error) throw error;
+
+      const idPublicacion = pubData?.id_publicacion;
+      const adjuntos: { id_publicacion: number; url: string; tipo_archivo: string; nombre_original: string | null }[] = [];
+
+      if (idPublicacion && imageUrl) {
+        adjuntos.push({ id_publicacion: idPublicacion, url: imageUrl, tipo_archivo: 'imagen', nombre_original: image?.fileName ?? null });
+      }
+      if (idPublicacion && fileUrl) {
+        adjuntos.push({ id_publicacion: idPublicacion, url: fileUrl, tipo_archivo: 'archivo', nombre_original: file?.name ?? null });
+      }
+
+      if (adjuntos.length > 0) {
+        const { error: errorArchivos } = await supabase.from('archivos_publicacion').insert(adjuntos);
+        if (errorArchivos) throw errorArchivos;
+      }
 
       Alert.alert('¡Éxito!', 'Tu publicación ha sido creada.');
       resetForm();
@@ -177,9 +190,18 @@ export default function CrearPublicacionScreen() {
   };
 
   const removeTag = (tagToRemove: string) => setTags(tags.filter(t => t !== tagToRemove));
-  const addDemoTag = () => {
-    const newTag = `#innovación${tags.length}`;
-    if (!tags.includes(newTag)) setTags([...tags, newTag]);
+  const addTag = () => {
+    let value = newTag.trim();
+    if (!value) {
+      setIsAddingTag(false);
+      setNewTag('');
+      return;
+    }
+    if (!value.startsWith('#')) value = `#${value}`;
+    value = value.replace(/\s+/g, '');
+    if (!tags.includes(value)) setTags([...tags, value]);
+    setNewTag('');
+    setIsAddingTag(false);
   };
 
   return (
@@ -316,10 +338,34 @@ export default function CrearPublicacionScreen() {
                   </TouchableOpacity>
                 </View>
               ))}
-              <TouchableOpacity style={styles.addTagBtn} onPress={addDemoTag}>
-                <Feather name="plus" size={14} color="#9E9E9E" style={{ marginRight: 4 }} />
-                <Text style={styles.addTagBtnText}>Agregar</Text>
-              </TouchableOpacity>
+              {isAddingTag ? (
+                <View style={styles.tagInputWrapper}>
+                  <TextInput
+                    style={styles.tagInput}
+                    placeholder="Escribe una etiqueta"
+                    placeholderTextColor="#9E9E9E"
+                    value={newTag}
+                    onChangeText={setNewTag}
+                    autoFocus
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onSubmitEditing={addTag}
+                    returnKeyType="done"
+                    maxLength={30}
+                  />
+                  <TouchableOpacity onPress={addTag} style={styles.tagInputConfirm}>
+                    <Feather name="check" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setIsAddingTag(false); setNewTag(''); }} style={styles.tagInputCancel}>
+                    <Feather name="x" size={14} color="#9E9E9E" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.addTagBtn} onPress={() => setIsAddingTag(true)}>
+                  <Feather name="plus" size={14} color="#9E9E9E" style={{ marginRight: 4 }} />
+                  <Text style={styles.addTagBtnText}>Agregar</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -393,6 +439,10 @@ const styles = StyleSheet.create({
   tagBadgeText: { color: '#E91E63', fontSize: 12, fontWeight: '500' },
   addTagBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#E0E0E0', borderStyle: 'dashed' },
   addTagBtnText: { color: '#9E9E9E', fontSize: 12, fontWeight: '500' },
+  tagInputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E91E63', borderRadius: 16, paddingLeft: 12, backgroundColor: '#FFF' },
+  tagInput: { fontSize: 12, color: '#212121', minWidth: 90, paddingVertical: 6, paddingRight: 4 },
+  tagInputConfirm: { backgroundColor: '#E91E63', borderRadius: 12, padding: 6, marginLeft: 4 },
+  tagInputCancel: { padding: 6, marginRight: 4 },
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: { width: '85%', backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#212121', marginBottom: 15 },

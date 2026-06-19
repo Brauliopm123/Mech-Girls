@@ -19,6 +19,7 @@ export default function EditarPublicacionScreen({ route, navigation }: any) {
 
   const [contenido, setContenido] = useState(publicacion.content ?? '');
   const [tipo, setTipo] = useState(publicacion.tag ?? 'general');
+  const [linkUrl, setLinkUrl] = useState(publicacion.link_url ?? '');
   const [guardando, setGuardando] = useState(false);
 
   const handleGuardar = async () => {
@@ -33,6 +34,7 @@ export default function EditarPublicacionScreen({ route, navigation }: any) {
         p_id_usuario:       usuario!.id_usuario,
         p_contenido_texto:  contenido.trim(),
         p_tipo_publicacion: tipo,
+        p_link_url:         linkUrl.trim() || null,
       });
 
       if (error) throw error;
@@ -126,6 +128,17 @@ export default function EditarPublicacionScreen({ route, navigation }: any) {
             textAlignVertical="top"
           />
 
+          <Text style={styles.label}>Enlace (opcional)</Text>
+          <TextInput
+            style={styles.textInputLink}
+            value={linkUrl}
+            onChangeText={setLinkUrl}
+            placeholder="https://ejemplo.com"
+            placeholderTextColor="#9E9E9E"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
           <TouchableOpacity
             style={[styles.btnGuardar, guardando && styles.btnDisabled]}
             onPress={handleGuardar}
@@ -166,6 +179,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#E0E0E0',
     paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 14, color: '#212121', minHeight: 180,
+  },
+  textInputLink: {
+    backgroundColor: '#F5F5F5', borderRadius: 10,
+    borderWidth: 1, borderColor: '#E0E0E0',
+    paddingHorizontal: 14, paddingVertical: 10,
+    fontSize: 13, color: '#212121',
   },
   btnGuardar: {
     marginTop: 24, backgroundColor: '#E91E63',
