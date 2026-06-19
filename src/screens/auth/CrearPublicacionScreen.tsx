@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   StyleSheet, Text, View, TextInput, TouchableOpacity, 
   ScrollView, KeyboardAvoidingView, Platform, Alert, Modal, ActivityIndicator
@@ -49,6 +49,8 @@ export default function CrearPublicacionScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+  const tagsSectionY = useRef(0);
 
   const isValid = content.trim().length > 0;
 
@@ -226,8 +228,17 @@ export default function CrearPublicacionScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
 
           <View style={styles.userInfoRow}>
             <View style={styles.avatar}>
@@ -327,7 +338,10 @@ export default function CrearPublicacionScreen() {
             </View>
           </View>
 
-          <View style={styles.section}>
+          <View
+            style={styles.section}
+            onLayout={(e) => { tagsSectionY.current = e.nativeEvent.layout.y; }}
+          >
             <Text style={styles.sectionTitle}>ETIQUETAS</Text>
             <View style={styles.tagsContainer}>
               {tags.map((tag) => (
@@ -361,7 +375,15 @@ export default function CrearPublicacionScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity style={styles.addTagBtn} onPress={() => setIsAddingTag(true)}>
+                <TouchableOpacity
+                  style={styles.addTagBtn}
+                  onPress={() => {
+                    setIsAddingTag(true);
+                    setTimeout(() => {
+                      scrollRef.current?.scrollTo({ y: tagsSectionY.current, animated: true });
+                    }, 150);
+                  }}
+                >
                   <Feather name="plus" size={14} color="#9E9E9E" style={{ marginRight: 4 }} />
                   <Text style={styles.addTagBtnText}>Agregar</Text>
                 </TouchableOpacity>
