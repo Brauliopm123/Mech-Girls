@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import * as AuthService from '../services/auth.service';
 import type { LoginCredentials, RegisterCredentials } from '../types/user.types';
@@ -9,8 +9,8 @@ export function useAuth() {
     isLoading,
     isAuthenticated,
     setUsuario,
-    setLoading,
     clearAuth,
+    inicializar,
     esAlumna,
     esPonente,
     esAdmin,
@@ -20,25 +20,13 @@ export function useAuth() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function restaurarSesion() {
-      try {
-        const sesionGuardada = await AuthService.getSesionGuardada();
-        if (sesionGuardada) {
-          const usuarioActualizado = await AuthService.getUsuarioCompleto(sesionGuardada.id_usuario);
-          setUsuario(usuarioActualizado);
-        }
-      } catch {
-        clearAuth();
-      } finally {
-        setLoading(false);
-      }
-    }
-    restaurarSesion();
+    let unsub: (() => void) | undefined;
+    inicializar().then(fn => { unsub = fn; });
+    return () => unsub?.();
   }, []);
 
   async function login(credentials: LoginCredentials) {
     setError(null);
-    setLoading(true);
     try {
       const usuario = await AuthService.login(credentials);
       setUsuario(usuario);
@@ -46,8 +34,6 @@ export function useAuth() {
       const msg = err.message ?? 'Error al iniciar sesión';
       setError(msg);
       throw new Error(msg);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -59,15 +45,13 @@ export function useAuth() {
 
   async function register(credentials: RegisterCredentials) {
     setError(null);
-    setLoading(true);
     try {
-      await AuthService.register(credentials);
+      const usuario = await AuthService.register(credentials);
+      setUsuario(usuario);
     } catch (err: any) {
       const msg = err.message ?? 'Error al crear la cuenta';
       setError(msg);
       throw new Error(msg);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -92,6 +76,17 @@ export function useAuth() {
     }
   }
 
+  async function updatePassword(nuevaContrasena: string) {
+    setError(null);
+    try {
+      await AuthService.updatePassword(nuevaContrasena);
+    } catch (err: any) {
+      const msg = err.message ?? 'Error al actualizar la contraseña';
+      setError(msg);
+      throw new Error(msg);
+    }
+  }
+
   return {
     usuario,
     isLoading,
@@ -106,6 +101,7 @@ export function useAuth() {
     register,
     logout,
     forgotPassword,
+    updatePassword,
     clearError: () => setError(null),
   };
 }
