@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import * as AuthService from '../services/auth.service';
-import type { LoginCredentials, RegisterCredentials } from '../types/user.types';
+import type { LoginCredentials, RegisterCredentials, UsuarioActivo } from '../types/user.types';
 
 export function useAuth() {
   const {
@@ -25,11 +25,12 @@ export function useAuth() {
     return () => unsub?.();
   }, []);
 
-  async function login(credentials: LoginCredentials) {
+  async function login(credentials: LoginCredentials): Promise<UsuarioActivo> {
     setError(null);
     try {
       const usuario = await AuthService.login(credentials);
       setUsuario(usuario);
+      return usuario;
     } catch (err: any) {
       const msg = err.message ?? 'Error al iniciar sesión';
       setError(msg);
@@ -57,9 +58,10 @@ export function useAuth() {
 
   async function logout() {
     setError(null);
+    // Limpiar store primero para que el navigator redirija inmediatamente
+    clearAuth();
     try {
       await AuthService.logout();
-      clearAuth();
     } catch (err: any) {
       setError(err.message ?? 'Error al cerrar sesión');
     }

@@ -10,16 +10,16 @@ import { Colors } from '../../constants/colors';
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
-  const { login, loginComoInvitada, isLoading } = useAuth();
+  const { login, loginComoInvitada } = useAuth();
 
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ correo: '', contrasena: '' });
 
   function validate(): boolean {
     const e = { correo: '', contrasena: '' };
     let valid = true;
-
     if (!correo.trim()) {
       e.correo = 'El correo es requerido'; valid = false;
     } else if (!/\S+@\S+\.\S+/.test(correo)) {
@@ -30,18 +30,22 @@ export default function LoginScreen() {
     } else if (contrasena.length < 6) {
       e.contrasena = 'Mínimo 6 caracteres'; valid = false;
     }
-
     setErrors(e);
     return valid;
   }
 
   async function handleLogin() {
     if (!validate()) return;
+    setLoading(true);
     try {
+      // Solo hace el signInWithPassword — onAuthStateChange maneja el resto
       await login({ correo, contrasena });
     } catch (err: any) {
       Alert.alert('Error al iniciar sesión', err.message);
+      setLoading(false);
     }
+    // No hacer setLoading(false) en éxito — el navigator redirigirá
+    // y este componente se desmontará
   }
 
   return (
@@ -54,7 +58,6 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo */}
         <View style={styles.logoSection}>
           <View style={styles.logoCircle}>
             <Image
@@ -99,7 +102,7 @@ export default function LoginScreen() {
           <Button
             label="Iniciar sesión"
             onPress={handleLogin}
-            loading={isLoading}
+            loading={loading}
             style={styles.loginBtn}
           />
 
@@ -140,8 +143,5 @@ const styles = StyleSheet.create({
   loginBtn: { marginBottom: 20 },
   divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: {
-     fontSize: 13,
-      color: Colors.textMuted 
-    },
+  dividerText: { fontSize: 13, color: Colors.textMuted },
 });
