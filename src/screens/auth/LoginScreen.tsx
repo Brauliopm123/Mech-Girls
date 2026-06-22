@@ -1,21 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { Button, Input } from '../../components/common/FormElements';
 import { Colors } from '../../constants/colors';
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
   const { login, loginComoInvitada } = useAuth();
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
 
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ correo: '', contrasena: '' });
+
+  // Apagar el spinner si onAuthStateChange autentica al usuario
+  // antes de que handleLogin termine (el navigator redirigirá después).
+  useEffect(() => {
+    if (isAuthenticated) setLoading(false);
+  }, [isAuthenticated]);
 
   function validate(): boolean {
     const e = { correo: '', contrasena: '' };
@@ -41,11 +49,11 @@ export default function LoginScreen() {
       // Solo hace el signInWithPassword — onAuthStateChange maneja el resto
       await login({ correo, contrasena });
     } catch (err: any) {
+      console.log('LOGIN ERROR:', JSON.stringify(err));
+      console.log('LOGIN ERROR message:', err.message);
       Alert.alert('Error al iniciar sesión', err.message);
       setLoading(false);
     }
-    // No hacer setLoading(false) en éxito — el navigator redirigirá
-    // y este componente se desmontará
   }
 
   return (

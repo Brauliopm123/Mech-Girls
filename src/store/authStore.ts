@@ -7,13 +7,14 @@ interface AuthStore {
   usuario:            UsuarioActivo | null;
   isLoading:          boolean;
   isAuthenticated:    boolean;
-  _suscripcionActiva: boolean;
-  _ultimoSignIn:      number; // timestamp del último SIGNED_IN
+  _sessionCount:      number;
+  _unsubscribe:       (() => void) | null;
 
-  setUsuario:  (usuario: UsuarioActivo | null) => void;
-  setLoading:  (loading: boolean) => void;
-  clearAuth:   () => void;
-  inicializar: () => Promise<() => void>;
+  setUsuario:         (usuario: UsuarioActivo | null) => void;
+  setLoading:         (loading: boolean) => void;
+  clearAuth:          () => void;
+  setLoginEnProgreso: (v: boolean) => void; // compat — no-op
+  inicializar:        () => () => void;
 
   esAlumna:   () => boolean;
   esPonente:  () => boolean;
@@ -22,11 +23,11 @@ interface AuthStore {
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  usuario:            null,
-  isLoading:          true,
-  isAuthenticated:    false,
-  _suscripcionActiva: false,
-  _ultimoSignIn:      0,
+  usuario:         null,
+  isLoading:       true,
+  isAuthenticated: false,
+  _sessionCount:   0,
+  _unsubscribe:    null,
 
   setUsuario: (usuario) =>
     set({ usuario, isAuthenticated: !!usuario }),
@@ -34,66 +35,79 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setLoading: (isLoading) =>
     set({ isLoading }),
 
+  // NO toca _sessionCount — solo limpia el usuario
   clearAuth: () =>
     set({ usuario: null, isAuthenticated: false }),
 
-  inicializar: async () => {
-    if (get()._suscripcionActiva) return () => {};
-    set({ _suscripcionActiva: true });
+  // Mantenido por compatibilidad — ya no se usa
+  setLoginEnProgreso: (_v) => {},
 
-    try {
-      const usuario = await AuthService.getSesionActiva();
-      set({ usuario, isAuthenticated: !!usuario, isLoading: false });
-    } catch {
-      set({ usuario: null, isAuthenticated: false, isLoading: false });
-    } finally {
-      set((state) => state.isLoading ? { isLoading: false } : state);
-    }
+  inicializar: () => {
+    get()._unsubscribe?.();
+
+    AuthService.getSesionActiva()
+      .then(usuario => set({ usuario, isAuthenticated: !!usuario, isLoading: false }))
+      .catch(() => set({ usuario: null, isAuthenticated: false, isLoading: false }));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN') {
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (!session) return;
-          // Registrar timestamp del login
-          const ahora = Date.now();
-          set({ _ultimoSignIn: ahora });
+          // Incrementar contador — identifica esta sesión
+          const newCount = get()._sessionCount + 1;
+          set({ _sessionCount: newCount });
           try {
             const usuario = await AuthService.getSesionActiva();
             if (usuario) set({ usuario, isAuthenticated: true, isLoading: false });
           } catch {
-            // Mantener estado
+            // mantener estado
           }
           return;
         }
 
         if (event === 'SIGNED_OUT') {
-          // Si hubo un SIGNED_IN en los últimos 3 segundos, ignorar este SIGNED_OUT
-          // Es el logout de la sesión anterior llegando tarde
-          const msSinceSignIn = Date.now() - get()._ultimoSignIn;
-          if (msSinceSignIn < 3000) return;
+          // Ignorar sesión de invitada
+          if (get().usuario?.id_rol === 0) return;
+          // Guardar el contador en el momento del SIGNED_OUT
+          const countAtSignOut = get()._sessionCount;
+          // Esperar 400ms: si llegó un SIGNED_IN nuevo, el contador habrá subido
+          setTimeout(() => {
+            if (get()._sessionCount === countAtSignOut) {
+              // Contador no cambió → logout real → limpiar
+              set({ usuario: null, isAuthenticated: false });
+            }
+            // Si cambió → era el SIGNED_OUT tardío del logout anterior → ignorar
+          }, 400);
+          return;
+        }
 
-          if (get().usuario?.id_rol !== 0) {
-            set({ usuario: null, isAuthenticated: false });
+        if (event === 'PASSWORD_RECOVERY') {
+          if (!session) return;
+          try {
+            const usuario = await AuthService.getSesionActiva();
+            if (usuario) set({ usuario, isAuthenticated: true, isLoading: false });
+          } catch {
+            // mantener estado
           }
           return;
         }
 
-        if (['TOKEN_REFRESHED', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) {
+        if (event === 'USER_UPDATED') {
           if (!session) return;
           try {
             const usuario = await AuthService.getSesionActiva();
             if (usuario) set({ usuario, isAuthenticated: true });
           } catch {
-            // Mantener estado
+            // mantener estado
           }
         }
       }
     );
 
-    return () => {
-      subscription.unsubscribe();
-      set({ _suscripcionActiva: false });
-    };
+    const unsub = () => subscription.unsubscribe();
+    set({ _unsubscribe: unsub });
+    return unsub;
   },
 
   esAlumna:   () => get().usuario?.rol?.nombre_rol === 'alumna'  || get().usuario?.id_rol === 1,

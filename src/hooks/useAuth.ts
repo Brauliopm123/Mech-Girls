@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import * as AuthService from '../services/auth.service';
-import type { LoginCredentials, RegisterCredentials, UsuarioActivo } from '../types/user.types';
+import type { LoginCredentials, RegisterCredentials } from '../types/user.types';
 
 export function useAuth() {
   const {
@@ -10,7 +10,6 @@ export function useAuth() {
     isAuthenticated,
     setUsuario,
     clearAuth,
-    inicializar,
     esAlumna,
     esPonente,
     esAdmin,
@@ -19,18 +18,12 @@ export function useAuth() {
 
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    inicializar().then(fn => { unsub = fn; });
-    return () => unsub?.();
-  }, []);
-
-  async function login(credentials: LoginCredentials): Promise<UsuarioActivo> {
+  async function login(credentials: LoginCredentials): Promise<void> {
     setError(null);
     try {
-      const usuario = await AuthService.login(credentials);
-      setUsuario(usuario);
-      return usuario;
+      // signInWithPassword dispara SIGNED_IN en onAuthStateChange.
+      // authStore lo maneja y hace setUsuario — no lo hacemos aquí.
+      await AuthService.login(credentials);
     } catch (err: any) {
       const msg = err.message ?? 'Error al iniciar sesión';
       setError(msg);
@@ -58,12 +51,14 @@ export function useAuth() {
 
   async function logout() {
     setError(null);
-    // Limpiar store primero para que el navigator redirija inmediatamente
-    clearAuth();
+    // NO llamar clearAuth() aquí.
+    // Dejar que onAuthStateChange(SIGNED_OUT) limpie el store
+    // después del timeout de 400ms (ver authStore).
     try {
       await AuthService.logout();
     } catch (err: any) {
-      setError(err.message ?? 'Error al cerrar sesión');
+      // Solo si falla el signOut, limpiar manualmente
+      clearAuth();
     }
   }
 
