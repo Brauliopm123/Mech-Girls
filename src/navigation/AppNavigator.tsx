@@ -43,9 +43,7 @@ export default function AppNavigator() {
   }, []);
 
   useEffect(() => {
-    // App cerrada — URL que la abrió
     Linking.getInitialURL().then(procesarUrl);
-    // App en segundo plano — URL que llega
     const sub = Linking.addEventListener('url', ({ url }) => procesarUrl(url));
     return () => sub.remove();
   }, []);
@@ -60,7 +58,9 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer linking={linking}>
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+      {isAuthenticated
+        ? <MainNavigator key="main" />
+        : <AuthNavigator key="auth" />}
     </NavigationContainer>
   );
 }

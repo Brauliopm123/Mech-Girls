@@ -6,8 +6,6 @@ import EditarPublicacionScreen from '../screens/auth/EditarPublicacionScreen';
 import PonentesScreen from '../screens/auth/PonentesScreen';
 import PonentesDetalleScreen from '../screens/auth/PonentesDetalleScreen';
 import ChatScreen from '../screens/auth/ChatScreen';
-import LoginScreen from '../screens/auth/LoginScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -20,9 +18,10 @@ export default function MainNavigator() {
       <Stack.Screen name="Ponentes"          component={PonentesScreen} />
       <Stack.Screen name="PonentesDetalle"   component={PonentesDetalleScreen} />
       <Stack.Screen name="Chat"              component={ChatScreen} />
-      {/* Accesibles desde modo invitado */}
-      <Stack.Screen name="Login"             component={LoginScreen} />
-      <Stack.Screen name="Register"          component={RegisterScreen} />
+      {/* Login y Register ELIMINADOS de aquí — viven solo en AuthNavigator.
+          Tener dos pantallas "Login" causaba que el cambio de cuenta se
+          quedara atascado en la pantalla de login. El modo invitada ahora
+          usa logout() para volver al AuthNavigator real. */}
     </Stack.Navigator>
   );
 }

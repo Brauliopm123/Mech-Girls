@@ -21,9 +21,8 @@ export function useAuth() {
   async function login(credentials: LoginCredentials): Promise<void> {
     setError(null);
     try {
-      // signInWithPassword dispara SIGNED_IN en onAuthStateChange.
-      // authStore lo maneja y hace setUsuario — no lo hacemos aquí.
       await AuthService.login(credentials);
+      // onAuthStateChange (SIGNED_IN) maneja setUsuario en authStore.
     } catch (err: any) {
       const msg = err.message ?? 'Error al iniciar sesión';
       setError(msg);
@@ -51,13 +50,16 @@ export function useAuth() {
 
   async function logout() {
     setError(null);
-    // NO llamar clearAuth() aquí.
-    // Dejar que onAuthStateChange(SIGNED_OUT) limpie el store
-    // después del timeout de 400ms (ver authStore).
+    // Caso invitada: no hay sesión de Supabase, limpiar store directamente.
+    if (esInvitado && esInvitado()) {
+      clearAuth();
+      return;
+    }
+    // Usuario real: signOut dispara SIGNED_OUT que limpia el store
+    // tras el timeout en authStore.
     try {
       await AuthService.logout();
     } catch (err: any) {
-      // Solo si falla el signOut, limpiar manualmente
       clearAuth();
     }
   }

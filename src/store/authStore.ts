@@ -35,11 +35,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setLoading: (isLoading) =>
     set({ isLoading }),
 
-  // NO toca _sessionCount — solo limpia el usuario
   clearAuth: () =>
     set({ usuario: null, isAuthenticated: false }),
 
-  // Mantenido por compatibilidad — ya no se usa
   setLoginEnProgreso: (_v) => {},
 
   inicializar: () => {
@@ -54,9 +52,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (!session) return;
-          // Incrementar contador — identifica esta sesión
-          const newCount = get()._sessionCount + 1;
-          set({ _sessionCount: newCount });
+          set({ _sessionCount: get()._sessionCount + 1 });
           try {
             const usuario = await AuthService.getSesionActiva();
             if (usuario) set({ usuario, isAuthenticated: true, isLoading: false });
@@ -67,18 +63,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         }
 
         if (event === 'SIGNED_OUT') {
-          // Ignorar sesión de invitada
           if (get().usuario?.id_rol === 0) return;
-          // Guardar el contador en el momento del SIGNED_OUT
           const countAtSignOut = get()._sessionCount;
-          // Esperar 400ms: si llegó un SIGNED_IN nuevo, el contador habrá subido
           setTimeout(() => {
             if (get()._sessionCount === countAtSignOut) {
-              // Contador no cambió → logout real → limpiar
               set({ usuario: null, isAuthenticated: false });
             }
-            // Si cambió → era el SIGNED_OUT tardío del logout anterior → ignorar
-          }, 400);
+          }, 500);
           return;
         }
 

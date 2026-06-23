@@ -30,7 +30,7 @@ interface PostItem {
 }
 
 export default function PerfilScreen({ navigation }: any) {
-  const { esInvitado } = useAuth();
+  const { esInvitado, logout: logoutInvitado } = useAuth();
 
   if (esInvitado && esInvitado()) {
     return (
@@ -44,13 +44,20 @@ export default function PerfilScreen({ navigation }: any) {
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: '#E91E63', borderRadius: 25, paddingVertical: 14, paddingHorizontal: 40, marginBottom: 12, width: '100%', alignItems: 'center' }}
-          onPress={() => navigation.navigate('Register')}
+          onPress={async () => {
+            // Salir del modo invitada -> AppNavigator muestra AuthNavigator.
+            // Pasamos intención de ir a Register vía deep link interno.
+            await logoutInvitado();
+          }}
         >
           <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>Crear cuenta</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{ borderWidth: 1.5, borderColor: '#E91E63', borderRadius: 25, paddingVertical: 14, paddingHorizontal: 40, width: '100%', alignItems: 'center' }}
-          onPress={() => navigation.navigate('Login')}
+          onPress={async () => {
+            // Salir del modo invitada -> AppNavigator muestra AuthNavigator (Login)
+            await logoutInvitado();
+          }}
         >
           <Text style={{ color: '#E91E63', fontWeight: '700', fontSize: 16 }}>Iniciar sesión</Text>
         </TouchableOpacity>
