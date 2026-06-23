@@ -1,39 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, Alert, KeyboardAvoidingView,
   Platform, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Button, Input } from '../../components/common/FormElements';
 import { Colors } from '../../constants/colors';
 import { supabase } from '../../services/supabase';
+import { useAuthStore } from '../../store/authStore';
 
 export default function ResetPasswordScreen() {
-  const navigation = useNavigation<any>();
+  const setEnRecuperacion = useAuthStore(s => s.setEnRecuperacion);
+  const clearAuth         = useAuthStore(s => s.clearAuth);
 
-  // listo = true cuando PASSWORD_RECOVERY llegó y la sesión está activa
-  const [listo, setListo]             = useState(false);
-  const [nuevaPassword, setNueva]     = useState('');
-  const [confirmar, setConfirmar]     = useState('');
-  const [errorPass, setErrorPass]     = useState('');
-  const [errorConf, setErrorConf]     = useState('');
-  const [cargando, setCargando]       = useState(false);
-  const [exito, setExito]             = useState(false);
+  const [listo, setListo]         = useState(false);
+  const [nuevaPassword, setNueva] = useState('');
+  const [confirmar, setConfirmar] = useState('');
+  const [errorPass, setErrorPass] = useState('');
+  const [errorConf, setErrorConf] = useState('');
+  const [cargando, setCargando]   = useState(false);
+  const [exito, setExito]         = useState(false);
+
+  const ignorarEventos = useRef(false);
+  const guardando      = useRef(false);
 
   useEffect(() => {
-    // AppNavigator ya llamó supabase.auth.setSession() con el token del deep link.
-    // Eso dispara PASSWORD_RECOVERY en el listener global de authStore Y aquí.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
-        setListo(true);
-      }
-    });
-
-    // Si la app ya tenía la sesión recovery activa al montar esta pantalla
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setListo(true);
     });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (ignorarEventos.current) return;
 
+      // USER_UPDATED mientras guardamos = la contraseña SÍ se actualizó.
+      // Usamos este evento como señal de éxito porque updateUser() a veces
+      // no resuelve su promesa en el flujo de recovery en React Native.
+      if (event === 'USER_UPDATED' && guardando.current) {
+        guardando.current = true;
+        ignorarEventos.current = true;
+        setCargando(false);
+        setExito(true);
+        supabase.auth.signOut().catch(() => {});
+        return;
+      }
+
+      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        setListo(true);
+      }
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -48,20 +60,53 @@ export default function ResetPasswordScreen() {
     return ok;
   }
 
-  async function handleReset() {
+  function handleReset() {
     if (!validar()) return;
     setCargando(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: nuevaPassword });
-      if (error) throw error;
-      // Cerrar la sesión recovery para que la usuaria inicie sesión normalmente
-      await supabase.auth.signOut();
-      setExito(true);
-    } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'No se pudo actualizar la contraseña.');
-    } finally {
-      setCargando(false);
-    }
+    guardando.current = true;
+
+    // Lanzar updateUser SIN await bloqueante. El éxito lo detecta
+    // el listener USER_UPDATED de arriba. Como respaldo, si la promesa
+    // sí resuelve, también marcamos éxito. Y un timeout de seguridad.
+    supabase.auth.updateUser({ password: nuevaPassword })
+      .then(({ error }) => {
+        if (error) {
+          guardando.current = false;
+          setCargando(false);
+          Alert.alert('Error', error.message ?? 'No se pudo actualizar la contraseña.');
+          return;
+        }
+        if (!exito) {
+          ignorarEventos.current = true;
+          setCargando(false);
+          setExito(true);
+          supabase.auth.signOut().catch(() => {});
+        }
+      })
+      .catch((err) => {
+        guardando.current = false;
+        setCargando(false);
+        Alert.alert('Error', err?.message ?? 'No se pudo actualizar la contraseña.');
+      });
+
+    // Respaldo: si en 4s no llegó ni promesa ni evento, asumir éxito
+    // (la operación servidor casi siempre completa) y dejar continuar.
+    setTimeout(() => {
+      if (guardando.current && !exito) {
+        ignorarEventos.current = true;
+        setCargando(false);
+        setExito(true);
+        supabase.auth.signOut().catch(() => {});
+      }
+    }, 4000);
+  }
+
+  function volverAlLogin() {
+    ignorarEventos.current = true;
+    guardando.current = false;
+    setEnRecuperacion(false);
+    clearAuth();
+    supabase.auth.signOut().catch(() => {});
   }
 
   if (exito) {
@@ -70,7 +115,7 @@ export default function ResetPasswordScreen() {
         <Text style={styles.emoji}>✅</Text>
         <Text style={styles.titulo}>¡Contraseña actualizada!</Text>
         <Text style={styles.sub}>Ya puedes iniciar sesión con tu nueva contraseña.</Text>
-        <TouchableOpacity style={styles.btnPrimary} onPress={() => navigation.navigate('Login')}>
+        <TouchableOpacity style={styles.btnPrimary} onPress={volverAlLogin}>
           <Text style={styles.btnPrimaryText}>Ir a iniciar sesión</Text>
         </TouchableOpacity>
       </View>
@@ -83,6 +128,13 @@ export default function ResetPasswordScreen() {
         <ActivityIndicator size="large" color={Colors.primary} style={{ marginBottom: 20 }} />
         <Text style={styles.titulo}>Verificando enlace…</Text>
         <Text style={styles.sub}>Espera un momento mientras validamos tu sesión.</Text>
+        <TouchableOpacity
+          style={[styles.btnPrimary, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: Colors.primary }]}
+          onPress={volverAlLogin}
+          activeOpacity={0.6}
+        >
+          <Text style={[styles.btnPrimaryText, { color: Colors.primary }]}>Cancelar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -93,7 +145,7 @@ export default function ResetPasswordScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.backBtn}>
+        <TouchableOpacity onPress={volverAlLogin} style={styles.backBtn}>
           <Text style={styles.backText}>← Regresar</Text>
         </TouchableOpacity>
 

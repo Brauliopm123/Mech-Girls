@@ -10,6 +10,7 @@ export function useAuth() {
     isAuthenticated,
     setUsuario,
     clearAuth,
+    setEnRecuperacion,
     esAlumna,
     esPonente,
     esAdmin,
@@ -20,9 +21,11 @@ export function useAuth() {
 
   async function login(credentials: LoginCredentials): Promise<void> {
     setError(null);
+    // Limpiar el flag de recuperación por si quedó activo de un reset previo.
+    // Si no, el SIGNED_IN de este login sería ignorado por el authStore.
+    setEnRecuperacion(false);
     try {
       await AuthService.login(credentials);
-      // onAuthStateChange (SIGNED_IN) maneja setUsuario en authStore.
     } catch (err: any) {
       const msg = err.message ?? 'Error al iniciar sesión';
       setError(msg);
