@@ -66,7 +66,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (!session) return;
-          // Si estamos en recuperación, NO cargar el usuario al dashboard.
+          // Durante recuperación, no cargar el usuario al dashboard.
           if (get().enRecuperacion) {
             set({ isLoading: false });
             return;
@@ -82,8 +82,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         }
 
         if (event === 'SIGNED_OUT') {
-          // Si estamos en recuperación, el signOut viene del reset de
-          // contraseña — ResetPasswordScreen maneja la salida con el flag.
+          // Durante recuperación, el signOut viene del reset de contraseña;
+          // ResetPasswordScreen maneja la salida con el flag enRecuperacion.
           if (get().enRecuperacion) return;
           if (get().usuario?.id_rol === 0) return;
           const countAtSignOut = get()._sessionCount;
@@ -97,6 +97,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
         if (event === 'USER_UPDATED') {
           if (!session) return;
+          if (get().enRecuperacion) return;
           try {
             const usuario = await AuthService.getSesionActiva();
             if (usuario) set({ usuario, isAuthenticated: true });
