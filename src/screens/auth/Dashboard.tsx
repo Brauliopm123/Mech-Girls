@@ -119,16 +119,7 @@ export default function Dashboard({ navigation }: any) {
       if (activeCategory !== 'Todo') query = query.eq('tag', activeCategory);
       const { data, error } = await query;
       if (error) throw error;
-      const postsConLike = await Promise.all((data ?? []).map(async (p: any) => {
-        const { data: likeData } = await supabase
-          .from('likes_publicacion')
-          .select('id_usuario')
-          .eq('id_publicacion', p.id)
-          .eq('id_usuario', usuario!.id_usuario)
-          .maybeSingle();
-        return { ...p, usuario_dio_like: !!likeData };
-      }));
-      setPosts(postsConLike);
+      setPosts(data ?? []);  // usuario_dio_like ya viene de la view
     } catch (err: any) {
       console.error('Error feed:', err.message);
     } finally {

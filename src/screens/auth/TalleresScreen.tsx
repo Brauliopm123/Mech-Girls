@@ -245,10 +245,13 @@ function FormularioEvento({
 }
 
 // ─── Modal detalle del taller ─────────────────────────────────────────────────
-function DetalleEvento({ evento, onCerrar, onInscribirse, onCancelar, usuario }: {
+function DetalleEvento({ evento, onCerrar, onInscribirse, onCancelar, usuario, puedeEditar, onEditar, onEliminar }: {
   evento: Evento; onCerrar: () => void;
   onInscribirse: (e: Evento) => void; onCancelar: (e: Evento) => void;
   usuario: any;
+  puedeEditar?: boolean;
+  onEditar?: (e: Evento) => void;
+  onEliminar?: (e: Evento) => void;
 }) {
   const esTaller = evento.tipo_evento === 'taller';
   const estaLleno = evento.cupo_maximo - evento.total_inscritos <= 0;
@@ -265,10 +268,22 @@ function DetalleEvento({ evento, onCerrar, onInscribirse, onCancelar, usuario }:
           <TouchableOpacity onPress={onCerrar} style={styles.detalleCerrar}>
             <Feather name="x" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <View style={[styles.detalleTipoBadge, esTaller ? styles.badgeTaller : styles.badgeConf]}>
-            <Text style={[styles.detalleTipoBadgeText, esTaller ? { color: Colors.primary } : { color: '#534AB7' }]}>
-              {esTaller ? 'Taller' : 'Conferencia'}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {puedeEditar && onEditar && (
+              <TouchableOpacity onPress={() => { onCerrar(); onEditar(evento); }} style={styles.detalleCerrar}>
+                <Feather name="edit-2" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
+            )}
+            {puedeEditar && onEliminar && (
+              <TouchableOpacity onPress={() => { onCerrar(); onEliminar(evento); }} style={styles.detalleCerrar}>
+                <Feather name="trash-2" size={20} color="#E53935" />
+              </TouchableOpacity>
+            )}
+            <View style={[styles.detalleTipoBadge, esTaller ? styles.badgeTaller : styles.badgeConf]}>
+              <Text style={[styles.detalleTipoBadgeText, esTaller ? { color: Colors.primary } : { color: '#534AB7' }]}>
+                {esTaller ? 'Taller' : 'Conferencia'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -391,7 +406,7 @@ function parseFechaLocal(fechaStr: string): string {
 }
 
 export default function TalleresScreen({navigation}: any) {
-  const { usuario, esAdmin } = useAuth();
+  const { usuario, esAdmin, esPonente, esAlumna } = useAuth();
   const isGuest = useAuthStore(s => s.esInvitado)();
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [filtrados, setFiltrados] = useState<Evento[]>([]);
@@ -521,7 +536,20 @@ export default function TalleresScreen({navigation}: any) {
     setGuardando(false);
   };
 
-  const puedeEditar = esAdmin && esAdmin();
+  const handleEliminar = (evento: Evento) => {
+    Alert.alert('Eliminar evento', `¿Eliminar "${evento.titulo}"? Esta acción no se puede deshacer.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+        try {
+          await supabase.from('eventos').delete().eq('id_evento', evento.id_evento);
+          setEventos(prev => prev.filter(e => e.id_evento !== evento.id_evento));
+        } catch (err: any) { Alert.alert('Error', err.message); }
+      }},
+    ]);
+  };
+
+  const puedeCrear  = !isGuest && (esAlumna?.() || esPonente?.() || esAdmin?.());
+  const puedeEditar = esPonente?.() || esAdmin?.();
 
   const renderEvento = ({ item }: { item: Evento }) => {
     const estaLleno = item.cupo_maximo - item.total_inscritos <= 0;
@@ -537,9 +565,14 @@ export default function TalleresScreen({navigation}: any) {
             <View style={styles.cardTitleRow}>
               <Text style={styles.cardTitle} numberOfLines={1}>{item.titulo}</Text>
               {puedeEditar && (
-                <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); abrirEditar(item); }} style={styles.editBtn}>
-                  <Feather name="edit-2" size={14} color={Colors.textMuted} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); abrirEditar(item); }} style={styles.editBtn}>
+                    <Feather name="edit-2" size={14} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); handleEliminar(item); }} style={styles.editBtn}>
+                    <Feather name="trash-2" size={14} color="#E53935" />
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
             {item.descripcion ? <Text style={styles.cardDesc} numberOfLines={1}>{item.descripcion}</Text> : null}
@@ -581,7 +614,7 @@ export default function TalleresScreen({navigation}: any) {
             <Feather name="users" size={14} color={Colors.primary} />
             <Text style={styles.btnPonentesText}>Ponentes</Text>
           </TouchableOpacity>
-          {esAdmin && esAdmin() && (
+          {puedeCrear && (
             <TouchableOpacity style={styles.btnNuevo} onPress={() => { resetForm(); setModalCrear(true); }}>
               <Text style={styles.btnNuevoText}>+ Nuevo</Text>
             </TouchableOpacity>
@@ -629,6 +662,9 @@ export default function TalleresScreen({navigation}: any) {
           onInscribirse={handleInscribirse}
           onCancelar={handleCancelar}
           usuario={usuario}
+          puedeEditar={puedeEditar}
+          onEditar={abrirEditar}
+          onEliminar={handleEliminar}
         />
       )}
 
