@@ -129,6 +129,13 @@ export default function LoginScreen() {
           <TouchableOpacity style={styles.guestBtn} onPress={loginComoInvitada}>
             <Text style={styles.guestBtnText}>Continuar como invitada →</Text>
           </TouchableOpacity>
+
+          <View style={styles.ponenteLink}>
+            <Text style={styles.ponenteLinkText}>¿Eres ponente? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('SolicitudPonente')}>
+              <Text style={styles.ponenteLinkAccion}>Regístrate aquí</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -138,6 +145,9 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   guestBtn: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
   guestBtnText: { fontSize: 13, color: Colors.textMuted, textDecorationLine: 'underline' },
+  ponenteLink: { flexDirection: 'row', justifyContent: 'center', marginTop: 12 },
+  ponenteLinkText: { fontSize: 13, color: Colors.textSecondary },
+  ponenteLinkAccion: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
   flex: { flex: 1, backgroundColor: Colors.background },
   container: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 60, paddingBottom: 40 },
   logoSection: { alignItems: 'center', marginBottom: 32 },

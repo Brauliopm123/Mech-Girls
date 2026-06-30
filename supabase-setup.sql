@@ -15,7 +15,6 @@ CREATE TABLE public.carreras (
 CREATE TABLE public.usuarios (
     id_usuario BIGSERIAL PRIMARY KEY,
     correo VARCHAR(255) UNIQUE NOT NULL,
-    contrasena_hash VARCHAR(255) NOT NULL,
     id_rol INTEGER DEFAULT 1 NOT NULL REFERENCES public.roles(id_rol),
     activo INTEGER DEFAULT 1 NOT NULL,
     fecha_registro TIMESTAMP DEFAULT NOW() NOT NULL,
@@ -48,7 +47,7 @@ CREATE TABLE public.perfiles_ponente (
     foto_perfil_url VARCHAR(255),
     sitio_web_url VARCHAR(255),
     fecha_actualizacion TIMESTAMP DEFAULT NOW() NOT NULL
-);<<
+);
 
 -- 4. PUBLICACIONES E INTERACCIONES (Dependen de usuarios)
 CREATE TABLE public.publicaciones (
@@ -92,6 +91,8 @@ CREATE TABLE public.eventos (
     lugar VARCHAR(255),
     enlace_virtual VARCHAR(255),
     fecha_actualizacion TIMESTAMP DEFAULT NOW() NOT NULL
+    temario text,
+    nombre_ponente text;
 );
 
 CREATE TABLE public.inscripciones (
@@ -142,8 +143,6 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_validar_cupo BEFORE INSERT ON public.inscripciones FOR EACH ROW EXECUTE FUNCTION public.fn_validar_cupo_evento();
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 Datos iniciales: roles
 INSERT INTO public.roles (id_rol, nombre_rol) VALUES
   (1, 'alumna'),
@@ -151,89 +150,6 @@ INSERT INTO public.roles (id_rol, nombre_rol) VALUES
   (3, 'admin')
 ON CONFLICT DO NOTHING;
 
-RPC: Registrar usuario con contraseña hasheada
-CREATE OR REPLACE FUNCTION public.fn_registrar_usuario(
-  p_correo      TEXT,
-  p_contrasena  TEXT,
-  p_nombre      TEXT,
-  p_apellidos   TEXT,
-  p_id_rol      INTEGER DEFAULT 1
-)
-RETURNS TABLE (
-  id_usuario          BIGINT,
-  correo              VARCHAR,
-  id_rol              INTEGER,
-  activo              INTEGER,
-  fecha_registro      TIMESTAMP,
-  fecha_actualizacion TIMESTAMP
-)
-LANGUAGE plpgsql SECURITY DEFINER
-AS $$
-DECLARE
-  nuevo_id BIGINT;
-BEGIN
-  INSERT INTO public.usuarios (correo, contrasena_hash, id_rol, activo)
-  VALUES (
-    LOWER(TRIM(p_correo)),
-    crypt(p_contrasena, gen_salt('bf')),
-    p_id_rol,
-    1
-  )
-  RETURNING public.usuarios.id_usuario INTO nuevo_id;
-
-  -- Alumna y Admin usan perfiles_alumna; Ponente usa perfiles_ponente
-  IF p_id_rol = 1 OR p_id_rol = 3 THEN
-    INSERT INTO public.perfiles_alumna (id_usuario, nombre, apellidos)
-    VALUES (nuevo_id, p_nombre, p_apellidos);
-  ELSIF p_id_rol = 2 THEN
-    INSERT INTO public.perfiles_ponente (id_usuario, nombre, apellidos)
-    VALUES (nuevo_id, p_nombre, p_apellidos);
-  END IF;
-
-  RETURN QUERY
-  SELECT u.id_usuario, u.correo, u.id_rol,
-         u.activo, u.fecha_registro, u.fecha_actualizacion
-  FROM public.usuarios u
-  WHERE u.id_usuario = nuevo_id;
-END;
-$$;
-
-RPC: Login — valida credenciales y devuelve usuario
-CREATE OR REPLACE FUNCTION public.fn_login(
-  p_correo      TEXT,
-  p_contrasena  TEXT
-)
-RETURNS TABLE (
-  id_usuario          BIGINT,
-  correo              VARCHAR,
-  id_rol              INTEGER,
-  activo              INTEGER,
-  nombre              VARCHAR,
-  apellidos           VARCHAR,
-  fecha_registro      TIMESTAMP,
-  fecha_actualizacion TIMESTAMP
-)
-LANGUAGE plpgsql SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    u.id_usuario,
-    u.correo,
-    u.id_rol,
-    u.activo,
-    COALESCE(pa.nombre, pp.nombre)::VARCHAR    AS nombre,
-    COALESCE(pa.apellidos, pp.apellidos)::VARCHAR AS apellidos,
-    u.fecha_registro,
-    u.fecha_actualizacion
-  FROM public.usuarios u
-  LEFT JOIN public.perfiles_alumna  pa ON pa.id_usuario = u.id_usuario
-  LEFT JOIN public.perfiles_ponente pp ON pp.id_usuario = u.id_usuario
-  WHERE u.correo = LOWER(TRIM(p_correo))
-    AND u.contrasena_hash = crypt(p_contrasena, u.contrasena_hash)
-    AND u.activo = 1;
-END;
-$$;
 
 Row Level Security
 Habilitar RLS en todas las tablas
@@ -246,15 +162,17 @@ ALTER TABLE public.likes_publicacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eventos          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inscripciones    ENABLE ROW LEVEL SECURITY;
 
-Políticas básicas de lectura (ajustar según necesidades)
+Políticas básicas de lectura
 CREATE POLICY "Leer usuarios autenticados"
   ON public.usuarios FOR SELECT USING (true);
 
 CREATE POLICY "Leer publicaciones"
-  ON public.publicaciones FOR SELECT USING (true);
+  ON public.publicaciones FOR SELECT
+  USING (true);
 
 CREATE POLICY "Leer eventos"
-  ON public.eventos FOR SELECT USING (true);
+  ON public.eventos FOR SELECT
+  USING (true);
 
 CREATE POLICY "Leer ponentes"
   ON public.perfiles_ponente FOR SELECT USING (true);
@@ -263,65 +181,84 @@ CREATE POLICY "Insertar publicacion propia"
   ON public.publicaciones FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Insertar comentario"
-  ON public.comentarios FOR INSERT WITH CHECK (true);
+  ON public.comentarios FOR INSERT
+  WITH CHECK (
+    id_usuario = public.fn_mi_id_usuario()
+    AND auth.uid() IS NOT NULL
+  );
 
 CREATE POLICY "Insertar like"
-  ON public.likes_publicacion FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Eliminar like propio"
-  ON public.likes_publicacion FOR DELETE USING (true);
+  ON public.likes_publicacion FOR INSERT
+  WITH CHECK (
+    id_usuario = public.fn_mi_id_usuario()
+    AND auth.uid() IS NOT NULL
+  );
 
 CREATE POLICY "Inscribirse a evento"
-  ON public.inscripciones FOR INSERT WITH CHECK (true);
+  ON public.inscripciones FOR INSERT
+  WITH CHECK (
+    id_usuario = public.fn_mi_id_usuario()
+    AND auth.uid() IS NOT NULL
+  );
 
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Leer roles" ON public.roles FOR SELECT USING (true);
+CREATE POLICY "Leer roles"
+  ON public.roles FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 
 ALTER TABLE public.usuarios         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfiles_alumna  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfiles_ponente ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.likes_publicacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comentarios       ENABLE ROW LEVEL SECURITY;
- 
 ALTER TABLE public.publicaciones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Leer publicaciones"    ON public.publicaciones;
-DROP POLICY IF EXISTS "Insertar publicacion"  ON public.publicaciones;
-CREATE POLICY "Leer publicaciones"   ON public.publicaciones FOR SELECT USING (true);
-CREATE POLICY "Insertar publicacion" ON public.publicaciones FOR INSERT WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Actualizar perfil ponente" ON public.perfiles_ponente;
-CREATE POLICY "Actualizar perfil ponente" ON public.perfiles_ponente FOR UPDATE USING (true);
+CREATE POLICY "Insertar publicacion"
+  ON public.publicaciones FOR INSERT
+  WITH CHECK (
+    id_usuario = public.fn_mi_id_usuario()
+    AND auth.uid() IS NOT NULL
+  );
+  
+CREATE POLICY "Actualizar perfil ponente"
+  ON public.perfiles_ponente FOR UPDATE
+  USING (id_usuario = public.fn_mi_id_usuario())
+  WITH CHECK (id_usuario = public.fn_mi_id_usuario());
 
-DROP POLICY IF EXISTS "Actualizar perfil alumna" ON public.perfiles_alumna;
-CREATE POLICY "Actualizar perfil alumna" ON public.perfiles_alumna FOR UPDATE USING (true);
+CREATE POLICY "Actualizar perfil alumna"
+  ON public.perfiles_alumna FOR UPDATE
+  USING (id_usuario = public.fn_mi_id_usuario())
+  WITH CHECK (id_usuario = public.fn_mi_id_usuario());
 
-DROP POLICY IF EXISTS "Leer usuarios"           ON public.usuarios;
-DROP POLICY IF EXISTS "Insertar usuario"        ON public.usuarios;
-DROP POLICY IF EXISTS "Leer perfil alumna"      ON public.perfiles_alumna;
-DROP POLICY IF EXISTS "Insertar perfil alumna"  ON public.perfiles_alumna;
-DROP POLICY IF EXISTS "Leer perfil ponente"     ON public.perfiles_ponente;
-DROP POLICY IF EXISTS "Insertar perfil ponente" ON public.perfiles_ponente;
  
-CREATE POLICY "Leer usuarios"           ON public.usuarios         FOR SELECT USING (true);
-CREATE POLICY "Insertar usuario"        ON public.usuarios         FOR INSERT WITH CHECK (true);
-CREATE POLICY "Leer perfil alumna"      ON public.perfiles_alumna  FOR SELECT USING (true);
-CREATE POLICY "Insertar perfil alumna"  ON public.perfiles_alumna  FOR INSERT WITH CHECK (true);
-CREATE POLICY "Leer perfil ponente"     ON public.perfiles_ponente FOR SELECT USING (true);
-CREATE POLICY "Insertar perfil ponente" ON public.perfiles_ponente FOR INSERT WITH CHECK (true);
+CREATE POLICY "Leer usuarios"
+  ON public.usuarios FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 
-DROP POLICY IF EXISTS "Leer likes"        ON public.likes_publicacion;
-DROP POLICY IF EXISTS "Insertar like"     ON public.likes_publicacion;
-DROP POLICY IF EXISTS "Eliminar like"     ON public.likes_publicacion;
-DROP POLICY IF EXISTS "Leer comentarios"  ON public.comentarios;
-DROP POLICY IF EXISTS "Insertar comentario" ON public.comentarios;
+CREATE POLICY "Leer perfil alumna"
+  ON public.perfiles_alumna FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Leer likes"          ON public.likes_publicacion FOR SELECT USING (true);
-CREATE POLICY "Insertar like"       ON public.likes_publicacion FOR INSERT WITH CHECK (true);
-CREATE POLICY "Eliminar like"       ON public.likes_publicacion FOR DELETE USING (true);
-CREATE POLICY "Leer comentarios"    ON public.comentarios       FOR SELECT USING (true);
-CREATE POLICY "Insertar comentario" ON public.comentarios       FOR INSERT WITH CHECK (true);
+CREATE POLICY "Leer perfil ponente"
+  ON public.perfiles_ponente FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+  
+CREATE POLICY "Insertar perfil ponente"
+  ON public.perfiles_ponente FOR INSERT
+  WITH CHECK (id_usuario = public.fn_mi_id_usuario());
 
-DROP view public.vw_feed_publicaciones
+CREATE POLICY "Leer likes"
+  ON public.likes_publicacion FOR SELECT
+  USING (true);
+
+CREATE POLICY "Eliminar like"
+  ON public.likes_publicacion FOR DELETE
+  USING (id_usuario = public.fn_mi_id_usuario());
+
+CREATE POLICY "Leer comentarios"
+  ON public.comentarios FOR SELECT
+  USING (true);
+
 CREATE OR REPLACE VIEW public.vw_feed_publicaciones AS
 SELECT
   p.id_publicacion AS id,
@@ -334,150 +271,72 @@ SELECT
   COALESCE(pa.nombre, pp.nombre, '') AS user_name,
   COALESCE(pa.apellidos, pp.apellidos, '') AS user_last_name,
   COALESCE(pa.foto_perfil_url, pp.foto_perfil_url, NULL) AS user_foto,
-  (SELECT COUNT(*) FROM public.likes_publicacion lp WHERE lp.id_publicacion = p.id_publicacion) AS likes,
-  (SELECT COUNT(*) FROM public.comentarios c WHERE c.id_publicacion = p.id_publicacion) AS comments,
-  COALESCE((
-    SELECT json_agg(json_build_object(
-             'id', ap.id_archivo,
-             'url', ap.url,
-             'tipo', ap.tipo_archivo,
-             'nombre', ap.nombre_original
-           ) ORDER BY ap.id_archivo)
-    FROM public.archivos_publicacion ap
-    WHERE ap.id_publicacion = p.id_publicacion
-  ), '[]'::json) AS archivos
-FROM public.publicaciones p
-LEFT JOIN public.perfiles_alumna  pa ON pa.id_usuario = p.id_usuario
-LEFT JOIN public.perfiles_ponente pp ON pp.id_usuario = p.id_usuario;
-
-  SELECT column_name, data_type 
-FROM information_schema.columns 
-WHERE table_name = 'usuarios' 
-AND table_schema = 'public'
-ORDER BY ordinal_position;
-
-SELECT table_name, column_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public'
-AND column_name IN ('nombre', 'apellido', 'nombre_completo')
-ORDER BY table_name;
-
-SELECT column_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public'
-AND table_name IN ('perfiles_alumna', 'perfiles_ponente')
-ORDER BY table_name, ordinal_position;
-
-SELECT * FROM public.fn_registrar_usuario(
-  'luisa@uteq.com',
-  'mechgirls',
-  'Luisa',
-  'López Ríos',
-  1
-);
-
-SELECT * FROM public.fn_registrar_usuario(
-  'luisa@uteq.com',
-  'mechgirls',
-  'Luisa',
-  'López Ríos',
-  1
-);
-
-DROP FUNCTION IF EXISTS public.fn_registrar_usuario(TEXT, TEXT, TEXT, TEXT, INTEGER);
-DROP FUNCTION IF EXISTS public.fn_login(TEXT, TEXT);
-
-SELECT table_name, column_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public'
-AND table_name IN ('publicaciones', 'comentarios', 'likes_publicacion')
-ORDER BY table_name, ordinal_position;
-
-SELECT column_name, udt_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public'
-AND table_name = 'publicaciones'
-AND column_name LIKE '%tipo%';
-
-SELECT table_name, column_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public'
-AND table_name IN ('eventos', 'inscripciones')
-ORDER BY table_name, ordinal_position;
+  (SELECT count(*) FROM likes_publicacion lp WHERE lp.id_publicacion = p.id_publicacion) AS likes,
+  (SELECT count(*) FROM comentarios c WHERE c.id_publicacion = p.id_publicacion) AS comments,
+  COALESCE((SELECT json_agg(json_build_object('id', ap.id_archivo, 'url', ap.url, 'tipo', ap.tipo_archivo, 'nombre', ap.nombre_original))
+            FROM archivos_publicacion ap
+            WHERE ap.id_publicacion = p.id_publicacion), '[]'::json) AS archivos,
+  EXISTS (
+    SELECT 1 FROM likes_publicacion lp2
+    WHERE lp2.id_publicacion = p.id_publicacion
+    AND lp2.id_usuario = fn_mi_id_usuario()
+  ) AS usuario_dio_like
+FROM publicaciones p
+LEFT JOIN perfiles_alumna pa ON pa.id_usuario = p.id_usuario
+LEFT JOIN perfiles_ponente pp ON pp.id_usuario = p.id_usuario;
 
 -- Política para subir archivos al bucket media
 CREATE POLICY "Subir archivos media"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'media');
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'media' AND auth.uid() IS NOT NULL);
 
 -- Política para leer archivos públicamente
 CREATE POLICY "Leer archivos media"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'media');
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'media');
 
 -- Política para eliminar archivos propios
 CREATE POLICY "Eliminar archivos media"
-ON storage.objects FOR DELETE
-USING (bucket_id = 'media');
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'media' AND auth.uid() IS NOT NULL);
 
-DROP POLICY "Permitir subidas 1ps738_0" ON storage.objects;
-
--- ─── Ejecutar en Supabase SQL Editor ────────────────────────────────────────
--- Agrega políticas faltantes para comentarios y registro de ponentes
--- 3. Inscripciones: leer propias
 CREATE POLICY "Leer inscripciones"
-  ON public.inscripciones FOR SELECT USING (true);
+  ON public.inscripciones FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 
--- 4. Cancelar/actualizar inscripción propia
 CREATE POLICY "Actualizar inscripcion propia"
-  ON public.inscripciones FOR UPDATE USING (true);
+  ON public.inscripciones FOR UPDATE
+  USING (id_usuario = public.fn_mi_id_usuario());
 
--- 6. Actualizar semblanza propia (ponente)
-CREATE POLICY "Actualizar perfil ponente propio"
-  ON public.perfiles_ponente FOR UPDATE USING (true);
 
--- 8. Insertar evento (taller/conferencia) — cualquier usuaria autenticada
 CREATE POLICY "Insertar evento"
-  ON public.eventos FOR INSERT WITH CHECK (true);
+  ON public.eventos FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.usuarios
+      WHERE auth_user_id = auth.uid() AND id_rol IN (1, 2, 3)
+    )
+  );
 
--- ─── Ejecutar en Supabase SQL Editor ────────────────────────────────────────
--- Hace id_ponente nullable en eventos para que alumnas puedan crear talleres
--- sin necesitar un ponente asignado.
- 
-ALTER TABLE public.eventos
-  ALTER COLUMN id_ponente DROP NOT NULL;
- 
--- Verificar
-SELECT column_name, is_nullable
-FROM information_schema.columns
-WHERE table_name = 'eventos' AND column_name = 'id_ponente';
-
-ALTER TABLE eventos ADD COLUMN temario text, ADD COLUMN nombre_ponente text;
-
--- ═══════════════════════════════════════════════════════
--- FIX: Política UPDATE para eventos (editar talleres)
--- ═══════════════════════════════════════════════════════
-DROP POLICY IF EXISTS "Actualizar evento" ON public.eventos;
 CREATE POLICY "Actualizar evento"
   ON public.eventos FOR UPDATE
-  USING (true)
-  WITH CHECK (true);
- 
--- ═══════════════════════════════════════════════════════
--- FIX: Política DELETE para eventos
--- ═══════════════════════════════════════════════════════
-DROP POLICY IF EXISTS "Eliminar evento" ON public.eventos;
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.usuarios
+      WHERE auth_user_id = auth.uid() AND id_rol IN (2, 3)
+    )
+  );
+
 CREATE POLICY "Eliminar evento"
   ON public.eventos FOR DELETE
-  USING (true);
-
--- ═══════════════════════════════════════════════════════════════════════
--- FIX: Funciones RPC para editar y eliminar publicaciones
--- Usan SECURITY DEFINER → bypasean RLS completamente
--- Ejecutar en Supabase SQL Editor
--- ═══════════════════════════════════════════════════════════════════════
-
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.usuarios
+      WHERE auth_user_id = auth.uid() AND id_rol IN (2, 3)
+    )
+  );
 -- ── 1. Editar publicación ───────────────────────────────────────────────
+DROP function public.fn_editar_publicacion()
 CREATE OR REPLACE FUNCTION public.fn_editar_publicacion(
   p_id_publicacion   BIGINT,
   p_id_usuario       BIGINT,
@@ -529,42 +388,6 @@ BEGIN
 END;
 $$;
 
--- ── 3. Verificación ─────────────────────────────────────────────────────
-SELECT routine_name
-FROM information_schema.routines
-WHERE routine_schema = 'public'
-  AND routine_name IN ('fn_editar_publicacion', 'fn_eliminar_publicacion');
-
-
--- ═══════════════════════════════════════════════════════════════════════
--- FIX: Función para recuperación de contraseña
--- Como el sistema usa contraseñas hasheadas con bcrypt (no Supabase Auth),
--- no es posible enviar email automático sin un servicio externo.
--- Esta función verifica si el correo existe y retorna un token temporal.
--- ═══════════════════════════════════════════════════════════════════════
-
-CREATE OR REPLACE FUNCTION public.fn_verificar_correo_recuperacion(
-  p_correo TEXT
-)
-RETURNS BOOLEAN
-LANGUAGE plpgsql SECURITY DEFINER
-AS $$
-DECLARE
-  existe BOOLEAN;
-BEGIN
-  SELECT EXISTS(
-    SELECT 1 FROM public.usuarios
-    WHERE correo = LOWER(TRIM(p_correo)) AND activo = 1
-  ) INTO existe;
-  RETURN existe;
-END;
-$$;
-
--- ═══════════════════════════════════════════════════════════════
--- SETUP COMPLETO: Mensajes, Notificaciones, Reset Password
--- Ejecutar en Supabase SQL Editor
--- ═══════════════════════════════════════════════════════════════
-
 -- ── 1. TABLA MENSAJES ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.mensajes (
   id_mensaje    BIGSERIAL PRIMARY KEY,
@@ -580,13 +403,24 @@ CREATE INDEX IF NOT EXISTS idx_mensajes_receptor ON public.mensajes(id_receptor)
 CREATE INDEX IF NOT EXISTS idx_mensajes_fecha    ON public.mensajes(fecha_envio DESC);
 
 ALTER TABLE public.mensajes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Leer mensajes propios"    ON public.mensajes;
-DROP POLICY IF EXISTS "Enviar mensajes"          ON public.mensajes;
-DROP POLICY IF EXISTS "Marcar mensajes leidos"   ON public.mensajes;
 
-CREATE POLICY "Leer mensajes propios"  ON public.mensajes FOR SELECT USING (true);
-CREATE POLICY "Enviar mensajes"        ON public.mensajes FOR INSERT WITH CHECK (true);
-CREATE POLICY "Marcar mensajes leidos" ON public.mensajes FOR UPDATE USING (true);
+CREATE POLICY "Leer mensajes propios"
+  ON public.mensajes FOR SELECT
+  USING (
+    id_emisor   = public.fn_mi_id_usuario()
+    OR id_receptor = public.fn_mi_id_usuario()
+  );
+
+CREATE POLICY "Enviar mensajes"
+  ON public.mensajes FOR INSERT
+  WITH CHECK (
+    id_emisor = public.fn_mi_id_usuario()
+    AND auth.uid() IS NOT NULL
+  );
+
+CREATE POLICY "Marcar mensajes leidos"
+  ON public.mensajes FOR UPDATE
+  USING (id_receptor = public.fn_mi_id_usuario());
 
 -- ── 2. TABLA NOTIFICACIONES ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.notificaciones (
@@ -603,13 +437,18 @@ CREATE TABLE IF NOT EXISTS public.notificaciones (
 CREATE INDEX IF NOT EXISTS idx_notif_usuario ON public.notificaciones(id_usuario, fecha_creacion DESC);
 
 ALTER TABLE public.notificaciones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Leer notificaciones propias"   ON public.notificaciones;
-DROP POLICY IF EXISTS "Insertar notificacion"         ON public.notificaciones;
-DROP POLICY IF EXISTS "Actualizar notificacion"       ON public.notificaciones;
 
-CREATE POLICY "Leer notificaciones propias" ON public.notificaciones FOR SELECT USING (true);
-CREATE POLICY "Insertar notificacion"       ON public.notificaciones FOR INSERT WITH CHECK (true);
-CREATE POLICY "Actualizar notificacion"     ON public.notificaciones FOR UPDATE USING (true);
+CREATE POLICY "Leer notificaciones propias"
+  ON public.notificaciones FOR SELECT
+  USING (id_usuario = public.fn_mi_id_usuario());
+
+CREATE POLICY "Actualizar notificacion"
+  ON public.notificaciones FOR UPDATE
+  USING (id_usuario = public.fn_mi_id_usuario());
+
+CREATE POLICY "Insertar notificacion"
+  ON public.notificaciones FOR INSERT
+  WITH CHECK (true);
 
 -- ── 3. TRIGGER: notificación automática en likes ───────────────
 CREATE OR REPLACE FUNCTION public.fn_notificar_like()
@@ -652,7 +491,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_notificar_like ON public.likes_publicacion;
 CREATE TRIGGER trg_notificar_like
   AFTER INSERT ON public.likes_publicacion
   FOR EACH ROW EXECUTE FUNCTION public.fn_notificar_like();
@@ -692,7 +530,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_notificar_comentario ON public.comentarios;
 CREATE TRIGGER trg_notificar_comentario
   AFTER INSERT ON public.comentarios
   FOR EACH ROW EXECUTE FUNCTION public.fn_notificar_comentario();
@@ -783,57 +620,6 @@ BEGIN
 END;
 $$;
 
--- ── 8. FUNCIÓN: reset password via Resend ─────────────────────
--- Esta función genera un token temporal; el email lo envía la Edge Function
-CREATE OR REPLACE FUNCTION public.fn_reset_password(
-  p_correo           TEXT,
-  p_token            TEXT,
-  p_nueva_contrasena TEXT
-)
-RETURNS BOOLEAN
-LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_id       BIGINT;
-  v_expiry   TIMESTAMP;
-BEGIN
-  SELECT id_usuario, reset_token_expiry
-    INTO v_id, v_expiry
-    FROM public.usuarios
-   WHERE correo = LOWER(TRIM(p_correo))
-     AND reset_token = p_token
-     AND activo = 1;
- 
-  -- Token no encontrado
-  IF v_id IS NULL THEN RETURN FALSE; END IF;
- 
-  -- Token expirado
-  IF v_expiry < NOW() THEN RETURN FALSE; END IF;
- 
-  -- Actualizar contraseña y limpiar token
-  UPDATE public.usuarios SET
-    contrasena_hash    = crypt(p_nueva_contrasena, gen_salt('bf')),
-    reset_token        = NULL,
-    reset_token_expiry = NULL
-  WHERE id_usuario = v_id;
- 
-  RETURN TRUE;
-END;
-$$;
-
--- Verificar creación
-SELECT table_name FROM information_schema.tables
-WHERE table_schema = 'public' AND table_name IN ('mensajes', 'notificaciones');
-
--- ── 9. COLUMNAS PARA RESET TOKEN ──────────────────────────────
--- Necesarias para la Edge Function de reset de contraseña
-ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS reset_token TEXT;
-ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;
-
--- ═══════════════════════════════════════════════════════════════
--- PUSH NOTIFICATIONS SETUP
--- Ejecutar en Supabase SQL Editor
--- ═══════════════════════════════════════════════════════════════
-
 -- 1. Columna para guardar el Expo Push Token del dispositivo
 ALTER TABLE public.usuarios ADD COLUMN IF NOT EXISTS push_token TEXT;
 
@@ -864,11 +650,7 @@ CREATE EXTENSION IF NOT EXISTS http;
 -- Nota: si "http" no está disponible, usar pg_net:
 -- CREATE EXTENSION IF NOT EXISTS pg_net;
 -- Y reemplazar net.http_post por pg_net.http_post
-ALTER TABLE perfiles_alumna ADD COLUMN IF NOT EXISTS semblanza TEXT;
 
-UPDATE usuarios
-SET id_usuario = (SELECT id_usuario FROM usuarios WHERE nombre_rol = 'admin')
-WHERE correo = 'braulio.pacheco06@gmail.com';
 -- ── 1. Columna dedicada para el link (separada de imagen/archivo) ───────
 ALTER TABLE public.publicaciones
   ADD COLUMN IF NOT EXISTS link_url TEXT;
@@ -887,18 +669,30 @@ CREATE INDEX IF NOT EXISTS idx_archivos_publicacion ON public.archivos_publicaci
 
 ALTER TABLE public.archivos_publicacion ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Leer archivos de publicacion" ON public.archivos_publicacion;
-DROP POLICY IF EXISTS "Insertar archivos de publicacion" ON public.archivos_publicacion;
-DROP POLICY IF EXISTS "Eliminar archivos de publicacion" ON public.archivos_publicacion;
-
 CREATE POLICY "Leer archivos de publicacion"
-  ON public.archivos_publicacion FOR SELECT USING (true);
+  ON public.archivos_publicacion FOR SELECT
+  USING (true);
 
 CREATE POLICY "Insertar archivos de publicacion"
-  ON public.archivos_publicacion FOR INSERT WITH CHECK (true);
+  ON public.archivos_publicacion FOR INSERT
+  WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.publicaciones
+      WHERE id_publicacion = archivos_publicacion.id_publicacion
+        AND id_usuario = public.fn_mi_id_usuario()
+    )
+  );
 
 CREATE POLICY "Eliminar archivos de publicacion"
-  ON public.archivos_publicacion FOR DELETE USING (true);
+  ON public.archivos_publicacion FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.publicaciones
+      WHERE id_publicacion = archivos_publicacion.id_publicacion
+        AND id_usuario = public.fn_mi_id_usuario()
+    )
+  );
 
 -- ── 3. Migrar datos existentes hacia las nuevas columnas (best-effort) ──
 INSERT INTO public.archivos_publicacion (id_publicacion, url, tipo_archivo)
@@ -914,3 +708,85 @@ WHERE url_referencia IS NOT NULL AND descripcion_url = 'Archivo adjunto';
 UPDATE public.publicaciones
 SET link_url = url_referencia
 WHERE url_referencia IS NOT NULL AND descripcion_url = 'Enlace adjunto';
+
+ALTER TABLE public.usuarios
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL;
+
+CREATE OR REPLACE FUNCTION public.fn_mi_id_usuario()
+RETURNS BIGINT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT id_usuario
+  FROM public.usuarios
+  WHERE auth_user_id = auth.uid()
+  LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fn_sync_auth_usuario()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  nuevo_id    BIGINT;
+  v_nombre    TEXT;
+  v_apellidos TEXT;
+  v_id_rol    INTEGER;
+BEGIN
+  v_nombre    := COALESCE(NEW.raw_user_meta_data->>'nombre',    'Sin nombre');
+  v_apellidos := COALESCE(NEW.raw_user_meta_data->>'apellidos', '');
+  -- Respetar el rol que pasa el signUp (alumna=1, ponente=2, admin=3)
+  -- Si no viene en el metadata, default a alumna (1)
+  v_id_rol    := COALESCE((NEW.raw_user_meta_data->>'id_rol')::INTEGER, 1);
+ 
+  INSERT INTO public.usuarios (correo, id_rol, activo, auth_user_id)
+  VALUES (NEW.email, v_id_rol, 1, NEW.id)
+  RETURNING id_usuario INTO nuevo_id;
+ 
+  -- Alumna y Admin → perfiles_alumna; Ponente → perfiles_ponente
+  IF v_id_rol = 1 OR v_id_rol = 3 THEN
+    INSERT INTO public.perfiles_alumna (id_usuario, nombre, apellidos)
+    VALUES (nuevo_id, v_nombre, v_apellidos);
+  ELSIF v_id_rol = 2 THEN
+    INSERT INTO public.perfiles_ponente (id_usuario, nombre, apellidos)
+    VALUES (nuevo_id, v_nombre, v_apellidos);
+  END IF;
+ 
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_sync_auth_usuario
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.fn_sync_auth_usuario();
+
+UPDATE public.usuarios SET auth_user_id = '2aeb7e68-c102-435b-a38b-96ac8c784eec' WHERE correo = 'luisa@uteq.com';
+UPDATE public.usuarios SET auth_user_id = 'ba627f39-965a-4911-a24e-1ffcd2a70780' WHERE correo = 'lau@uteq.com';
+UPDATE public.usuarios SET auth_user_id = '2f078ca3-c25b-4995-be53-213bde3a3f56' WHERE correo = 'susi@uteq.com';
+UPDATE public.usuarios SET auth_user_id = '319a6a3d-f943-46b8-af1c-afc8111ad0f1' WHERE correo = 'braulio@uteq.com';
+UPDATE public.usuarios SET auth_user_id = 'e811ed37-9f0b-4b15-ae82-8326c675a287' WHERE correo = 'diego@gmail.com';
+UPDATE public.usuarios SET auth_user_id = '8aed83e5-5012-40e7-b751-b192de6fcbe1' WHERE correo = 'carmen@uteq.com';
+UPDATE public.usuarios SET auth_user_id = '62f6818a-49ce-4a58-a3a8-27e9d504715e' WHERE correo = 'sam@gmail.com';
+UPDATE public.usuarios SET auth_user_id = 'e6dbb827-20fe-4329-9d15-a042ed425922' WHERE correo = 'mariacontreras@gmail.com';
+UPDATE public.usuarios SET auth_user_id = '1507edbc-9c0e-4501-a9db-87379ae03fc4' WHERE correo = 'braulio.pacheco06@gmail.com';
+UPDATE public.usuarios SET auth_user_id = '0148ee08-cbe6-4f88-9c96-f7b23d89c871' WHERE correo = '2024310092@uteq.edu.mx';
+UPDATE public.usuarios SET auth_user_id = '31e98945-cf6c-4484-be77-12ae31bbac0d' WHERE correo = 'prueba@gmail.com';
+ 
+CREATE POLICY "Leer perfil ponente"
+  ON public.perfiles_ponente FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+ 
+CREATE POLICY "Actualizar publicacion propia"
+  ON public.publicaciones FOR UPDATE
+  USING (id_usuario = public.fn_mi_id_usuario())
+  WITH CHECK (id_usuario = public.fn_mi_id_usuario());
+ 
+CREATE POLICY "Eliminar publicacion propia"
+  ON public.publicaciones FOR DELETE
+  USING (id_usuario = public.fn_mi_id_usuario());
+ 
+CREATE POLICY "Eliminar comentario propio"
+  ON public.comentarios FOR DELETE
+  USING (id_usuario = public.fn_mi_id_usuario());

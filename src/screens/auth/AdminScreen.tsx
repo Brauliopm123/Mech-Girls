@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Colors } from '../../constants/colors';
@@ -34,6 +35,7 @@ const ROL_COLORS: Record<string, { bg: string; text: string; border: string }> =
 
 export default function AdminScreen() {
   const { usuario, esAdmin, logout } = useAuth();
+  const navigation = useNavigation<any>();
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [filtrados, setFiltrados] = useState<UsuarioAdmin[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
@@ -44,6 +46,7 @@ export default function AdminScreen() {
   const [modalUsuario, setModalUsuario] = useState<UsuarioAdmin | null>(null);
   const [cambiandoRol, setCambiandoRol] = useState(false);
   const [stats, setStats] = useState({ total: 0, admins: 0, ponentes: 0, alumnas: 0 });
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
 
   // Guard: solo admin puede ver esta pantalla
   if (!esAdmin || !esAdmin()) {
@@ -99,6 +102,12 @@ export default function AdminScreen() {
 
       const { data: rolesData } = await supabase.from('roles').select('id_rol, nombre_rol');
       setRoles((rolesData as Rol[]) ?? []);
+
+      const { count } = await supabase
+        .from('solicitudes_ponente')
+        .select('id_solicitud', { count: 'exact', head: true })
+        .eq('estado', 'pendiente');
+      setSolicitudesPendientes(count ?? 0);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
@@ -217,6 +226,21 @@ export default function AdminScreen() {
         <View style={styles.statCard}><Text style={[styles.statNum, { color: '#2E7D32' }]}>{stats.ponentes}</Text><Text style={styles.statLabel}>Ponentes</Text></View>
         <View style={styles.statCard}><Text style={[styles.statNum, { color: '#1565C0' }]}>{stats.alumnas}</Text><Text style={styles.statLabel}>Alumnas</Text></View>
       </View>
+
+      {/* Botón solicitudes de ponente */}
+      <TouchableOpacity
+        style={styles.solicitudesBtn}
+        onPress={() => navigation.navigate('Solicitudes')}
+      >
+        <Feather name="user-plus" size={18} color={Colors.primary} />
+        <Text style={styles.solicitudesBtnText}>Solicitudes de ponente</Text>
+        {solicitudesPendientes > 0 && (
+          <View style={styles.solicitudesBadge}>
+            <Text style={styles.solicitudesBadgeText}>{solicitudesPendientes}</Text>
+          </View>
+        )}
+        <Feather name="chevron-right" size={16} color={Colors.textSecondary} style={{ marginLeft: 'auto' }} />
+      </TouchableOpacity>
 
       {/* Búsqueda */}
       <View style={styles.searchContainer}>
@@ -347,6 +371,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 22, fontWeight: '700', color: Colors.text },
   logoutBtn: { padding: 6 },
+  solicitudesBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 14, backgroundColor: Colors.surface, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 16, paddingVertical: 12 },
+  solicitudesBtnText: { fontSize: 14, fontWeight: '500', color: Colors.text },
+  solicitudesBadge: { backgroundColor: Colors.primary, borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  solicitudesBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
   statsRow: { flexDirection: 'row', gap: 8, marginHorizontal: 20, marginBottom: 14 },
   statCard: { flex: 1, backgroundColor: Colors.surface, borderRadius: 12, borderWidth: 0.5, borderColor: Colors.border, paddingVertical: 10, alignItems: 'center' },
   statNum: { fontSize: 18, fontWeight: '700', color: Colors.primary },

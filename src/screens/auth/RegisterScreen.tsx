@@ -8,13 +8,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button, Input } from '../../components/common/FormElements';
 import { Colors } from '../../constants/colors';
 
-type Rol = 'alumna' | 'ponente';
-
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
   const { register, isLoading } = useAuth();
 
-  const [rol, setRol] = useState<Rol>('alumna');
   const [nombre, setNombre] = useState('');
   const [apellidos, setApellidos] = useState('');
   const [correo, setCorreo] = useState('');
@@ -48,13 +45,11 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (!validate()) return;
-    // id_rol: 1 = alumna, 2 = ponente, 3 = admin
-    const id_rol = rol === 'alumna' ? 1 : 2;
     try {
-      await register({ nombre, apellidos, correo, contrasena, id_rol });
+      await register({ nombre, apellidos, correo, contrasena, id_rol: 1 });
       Alert.alert(
         '¡Cuenta creada!',
-        `Tu cuenta de ${rol} fue creada. Ya puedes iniciar sesión.`,
+        'Tu cuenta fue creada. Ya puedes iniciar sesión.',
         [{ text: 'Iniciar sesión', onPress: () => navigation.navigate('Login') }]
       );
     } catch (err: any) {
@@ -78,27 +73,6 @@ export default function RegisterScreen() {
 
         <Text style={styles.title}>Crear cuenta</Text>
         <Text style={styles.subtitle}>Únete a la comunidad Mech Girls</Text>
-
-        {/* ── Selector de rol ── */}
-        <Text style={styles.rolLabel}>¿Cómo participas?</Text>
-        <View style={styles.rolRow}>
-          <TouchableOpacity
-            style={[styles.rolBtn, rol === 'alumna' && styles.rolBtnActive]}
-            onPress={() => setRol('alumna')}
-          >
-            <Text style={[styles.rolBtnText, rol === 'alumna' && styles.rolBtnTextActive]}>
-              🎓 Alumna
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rolBtn, rol === 'ponente' && styles.rolBtnActive]}
-            onPress={() => setRol('ponente')}
-          >
-            <Text style={[styles.rolBtnText, rol === 'ponente' && styles.rolBtnTextActive]}>
-              🎤 Ponente
-            </Text>
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.row}>
           <View style={styles.half}>
@@ -138,16 +112,6 @@ const styles = StyleSheet.create({
   backText: { fontSize: 14, color: Colors.primary, fontWeight: '500' },
   title: { fontSize: 26, fontWeight: '700', color: Colors.text, marginBottom: 4 },
   subtitle: { fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
-  rolLabel: { fontSize: 13, fontWeight: '600', color: Colors.text, marginBottom: 8 },
-  rolRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  rolBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 12,
-    borderWidth: 1.5, borderColor: Colors.border,
-    alignItems: 'center', backgroundColor: Colors.surface,
-  },
-  rolBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryPale },
-  rolBtnText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
-  rolBtnTextActive: { color: Colors.primary },
   row: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
   termsText: { fontSize: 12, color: Colors.textSecondary, marginBottom: 20, lineHeight: 18 },

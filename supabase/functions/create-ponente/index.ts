@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Verificar que quien llama tiene sesión válida
+    // Verificar sesión válida
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'No autorizado' }), {
@@ -45,7 +45,16 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { correo, nombre, apellidos, especialidad, empresa } = await req.json()
+    const {
+      correo,
+      nombre,
+      apellidos,
+      especialidad,
+      empresa,
+      semblanza,
+      sitio_web_url,
+      id_solicitud,
+    } = await req.json()
 
     if (!correo || !nombre || !apellidos) {
       return new Response(JSON.stringify({ error: 'correo, nombre y apellidos son requeridos' }), {
@@ -53,45 +62,51 @@ Deno.serve(async (req) => {
       })
     }
 
-    // 1. Crear en Supabase Auth — email_confirm: true, sin contraseña
-    //    El ponente recibirá un email para establecer su contraseña
+    // 1. Crear cuenta pasando id_rol=2 en metadata para que el trigger
+    //    fn_sync_auth_usuario cree perfiles_ponente directamente (no perfiles_alumna)
     const { data: authUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: correo.trim().toLowerCase(),
       email_confirm: true,
-      user_metadata: { nombre, apellidos },
+      user_metadata: { nombre, apellidos, id_rol: 2 },
     })
     if (createError) throw createError
 
-    // Esperar a que el trigger fn_sync_auth_usuario ejecute
-    await new Promise(r => setTimeout(r, 600))
+    // Esperar al trigger fn_sync_auth_usuario
+    await new Promise(r => setTimeout(r, 800))
 
-    // 2. Cambiar rol a ponente (el trigger lo creó como alumna por defecto)
+    // 2. Obtener id_usuario creado por el trigger
     const { data: usuarioNuevo, error: rolError } = await supabaseAdmin
       .from('usuarios')
-      .update({ id_rol: 2 })
-      .eq('auth_user_id', authUser.user.id)
       .select('id_usuario')
+      .eq('auth_user_id', authUser.user.id)
       .single()
     if (rolError) throw rolError
 
     const id_usuario = usuarioNuevo.id_usuario
 
-    // 3. Eliminar perfil_alumna creado por el trigger y crear perfil_ponente
-    await supabaseAdmin.from('perfiles_alumna').delete().eq('id_usuario', id_usuario)
-
+    // 3. Actualizar el perfil_ponente (ya creado por el trigger) con semblanza y demás campos
     const { error: perfilError } = await supabaseAdmin
       .from('perfiles_ponente')
-      .insert({
-        id_usuario,
-        nombre: nombre.trim(),
-        apellidos: apellidos.trim(),
-        especialidad: especialidad?.trim() || null,
-        empresa_institucion: empresa?.trim() || null,
+      .update({
+        nombre:              nombre.trim(),
+        apellidos:           apellidos.trim(),
+        especialidad:        especialidad?.trim()    || null,
+        empresa_institucion: empresa?.trim()         || null,
+        semblanza:           semblanza?.trim()       || null,
+        sitio_web_url:       sitio_web_url?.trim()   || null,
       })
+      .eq('id_usuario', id_usuario)
     if (perfilError) throw perfilError
 
-    // 4. Generar link de reset para que establezca su contraseña
-    //    Solo llega si el correo es real — si es falso simplemente falla silenciosamente
+    // 4. Marcar la solicitud como aprobada (si viene de una)
+    if (id_solicitud) {
+      await supabaseAdmin
+        .from('solicitudes_ponente')
+        .update({ estado: 'aprobada', fecha_resolucion: new Date().toISOString() })
+        .eq('id_solicitud', id_solicitud)
+    }
+
+    // 5. Generar link de reset para que el ponente establezca su contraseña
     await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email: correo.trim().toLowerCase(),
