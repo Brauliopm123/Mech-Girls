@@ -18,24 +18,12 @@
             "BROWSABLE",
             "DEFAULT"
           ]
-        },
-        {
-          "action": "VIEW",
-          "data": [
-            {
-              "scheme": "mechgirls"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
         }
       ],
       "package": "com.anonymous.mechgirlsapp"
     },
     "ios": {
-      "bundleIdentiier": "com.mechgirls.app"
+      "bundleIdentifier": "com.mechgirls.app"
     }
   }
 }

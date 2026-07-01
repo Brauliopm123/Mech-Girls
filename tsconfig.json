@@ -1,7 +1,8 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "lib": ["ES2020"],
+    "jsx": "react-jsx",
     "types": ["node"]
-  },
-  "extends": "expo/tsconfig.base"
+  }
 }
