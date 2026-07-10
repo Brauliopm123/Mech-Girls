@@ -1,51 +1,51 @@
-// Edge Function: send-push
-// Envía notificación push via Expo Push API
-// supabase functions deploy send-push --project-ref xtgbbhkfwxvcuvvyybut
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-
+Deno.serve(async (req) => {
   try {
-    const { token, titulo, cuerpo, data } = await req.json();
+    const payload = await req.json();
+    const record = payload.record;
+    if (!record?.id_usuario) {
+      return new Response('sin id_usuario', { status: 200 });
+    }
 
-    if (!token || !token.startsWith('ExponentPushToken[')) {
-      return new Response(JSON.stringify({ ok: false, error: 'Token inválido' }), { headers: cors });
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const { data: usuario, error } = await supabase
+      .from('usuarios')
+      .select('push_token')
+      .eq('id_usuario', record.id_usuario)
+      .maybeSingle();
+
+    if (error || !usuario?.push_token) {
+      return new Response('usuario sin token', { status: 200 });
     }
 
     const mensaje = {
-      to:    token,
+      to: usuario.push_token,
       sound: 'default',
-      title: titulo,
-      body:  cuerpo,
-      data:  data ?? {},
-      badge: 1,
-      // Prioridad alta para Android
-      priority: 'high',
-      channelId: 'default',
+      title: record.titulo ?? 'Mech Girls',
+      body: record.cuerpo ?? '',
+      data: { tipo: record.tipo, id_referencia: record.id_referencia },
     };
 
     const res = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
-        'Accept':         'application/json',
-        'Content-Type':   'application/json',
-        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify(mensaje),
     });
 
-    const result = await res.json();
-    console.log('Expo push result:', JSON.stringify(result));
-
-    return new Response(JSON.stringify({ ok: true, result }), { headers: cors });
-
+    const resultado = await res.json();
+    return new Response(JSON.stringify(resultado), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
-    console.error('send-push error:', err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors });
+    return new Response(JSON.stringify({ error: String(err) }), { status: 200 });
   }
 });

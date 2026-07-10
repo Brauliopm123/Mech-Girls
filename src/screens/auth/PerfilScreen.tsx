@@ -381,26 +381,20 @@ export default function PerfilScreen({ navigation }: any) {
       {/* Sección: Mis constancias — solo aparece si hay constancias disponibles */}
       {constancias.length > 0 && (
         <View style={styles.constanciasSection}>
-          <Text style={styles.constanciasTitulo}>Mis constancias</Text>
-          {constancias.map(item => (
-            <TouchableOpacity
-              key={item.id_inscripcion}
-              style={styles.constanciaItem}
-              onPress={() => verConstancia(item)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.constanciaIconWrapper}>
-                <Feather name="award" size={18} color="#E91E63" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.constanciaTitulo} numberOfLines={1}>{item.titulo}</Text>
-                <Text style={styles.constanciaFecha}>
-                  {new Date(item.fecha_hora_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#9E9E9E" />
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={styles.constanciasLink}
+            onPress={() => navigation.navigate('Constancias')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.constanciaIconWrapper}>
+              <Feather name="award" size={18} color="#E91E63" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.constanciaTitulo}>Mis constancias</Text>
+              <Text style={styles.constanciaFecha}>{constancias.length} disponible{constancias.length !== 1 ? 's' : ''}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color="#9E9E9E" />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -518,6 +512,7 @@ const styles = StyleSheet.create({
   constanciaIconWrapper: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   constanciaTitulo: { fontSize: 13, fontWeight: '600', color: '#212121' },
   constanciaFecha: { fontSize: 11, color: '#9E9E9E', marginTop: 2 },
+  constanciasLink: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FCE4EC', borderWidth: 1, borderColor: '#F8BBD0', borderRadius: 12, padding: 12 },
   tabsContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#EEE', marginBottom: 15 },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderBottomColor: '#E91E63' },

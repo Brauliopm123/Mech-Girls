@@ -6,6 +6,8 @@
     "userInterfaceStyle": "light",
     "scheme": "mechgirls",
     "android": {
+      "googleServicesFile": "./google-services.json",
+      "package": "com.anonymous.mechgirlsapp",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -19,11 +21,17 @@
             "DEFAULT"
           ]
         }
-      ],
-      "package": "com.anonymous.mechgirlsapp"
+      ]
+      
     },
     "ios": {
       "bundleIdentifier": "com.mechgirls.app"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "060b605f-065a-4c33-a063-803178084ac8"
+      }
+    },
+    "owner": "brauliocode"
   }
 }
