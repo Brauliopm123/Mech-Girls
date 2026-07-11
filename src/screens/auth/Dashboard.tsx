@@ -128,7 +128,71 @@ export default function Dashboard({ navigation }: any) {
     }
   }, [activeCategory, usuario?.id_usuario]);
 
+  // Refresca UNA sola publicación desde la vista (para eventos realtime de likes/comentarios)
+  const refrescarPost = useCallback(async (idPublicacion: number) => {
+    const { data } = await supabase
+      .from('vw_feed_publicaciones')
+      .select('*')
+      .eq('id', idPublicacion)
+      .maybeSingle();
+
+    if (data) {
+      // La publicación aún existe: reemplazar sus datos (likes, comments, etc.)
+      setPosts(prev => prev.map(p => (p.id === idPublicacion ? (data as PostItem) : p)));
+    } else {
+      // La publicación fue eliminada: quitarla del feed
+      setPosts(prev => prev.filter(p => p.id !== idPublicacion));
+    }
+  }, []);
+
   useEffect(() => { cargar(); }, [cargar]);
+  // ── Realtime: refrescar conteos de likes/comentarios ─────────
+  useEffect(() => {
+    if (!usuario?.id_usuario) return;
+
+    // Recalcula likes y comentarios de las publicaciones visibles
+    const refrescarConteos = async () => {
+      setPosts(prevPosts => {
+        const ids = prevPosts.map(p => p.id);
+        if (ids.length === 0) return prevPosts;
+
+        // Consulta asíncrona: contar likes y comentarios de esas publicaciones
+        (async () => {
+          const [likesRes, comentsRes] = await Promise.all([
+            supabase.from('likes_publicacion').select('id_publicacion').in('id_publicacion', ids),
+            supabase.from('comentarios').select('id_publicacion').in('id_publicacion', ids),
+          ]);
+
+          const contar = (rows: any[] | null) => {
+            const mapa: Record<number, number> = {};
+            (rows ?? []).forEach(r => {
+              mapa[r.id_publicacion] = (mapa[r.id_publicacion] ?? 0) + 1;
+            });
+            return mapa;
+          };
+
+          const likesMap = contar(likesRes.data);
+          const commentsMap = contar(comentsRes.data);
+
+          setPosts(cur => cur.map(p => ({
+            ...p,
+            likes: likesMap[p.id] ?? 0,
+            comments: commentsMap[p.id] ?? 0,
+          })));
+        })();
+
+        return prevPosts;
+      });
+    };
+
+    const ch = supabase
+      .channel('feed-likes-comments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes_publicacion' }, refrescarConteos)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comentarios' }, refrescarConteos)
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [usuario?.id_usuario]);
 
   const enviarPush = async (idPublicacion: number, titulo: string, cuerpo: string) => {
     try {
