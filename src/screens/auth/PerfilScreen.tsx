@@ -8,7 +8,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../services/supabase';
-import * as WebBrowser from 'expo-web-browser';
 
 interface ArchivoAdjunto {
   id: number;
@@ -30,11 +29,8 @@ interface PostItem {
   usuario_dio_like: boolean;
 }
 
-interface ConstanciaItem {
-  id_inscripcion: number;
-  id_evento: number;
-  titulo: string;
-  fecha_hora_inicio: string;
+interface ReconocimientoRef {
+  id_reconocimiento: number;
 }
 
 export default function PerfilScreen({ navigation }: any) {
@@ -81,7 +77,7 @@ export default function PerfilScreen({ navigation }: any) {
   const [nombreEdit, setNombreEdit] = useState('');
   const [apellidosEdit, setApellidosEdit] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const [constancias, setConstancias] = useState<ConstanciaItem[]>([]);
+  const [reconocimientos, setReconocimientos] = useState<ReconocimientoRef[]>([]);
 
   const { usuario, logout, esAlumna, esPonente } = useAuth();
 
@@ -135,38 +131,20 @@ export default function PerfilScreen({ navigation }: any) {
     }
   }, [usuario?.id_usuario]);
 
-  // Constancias: inscripciones confirmadas de eventos ya finalizados.
-  // El PDF se genera on-demand en la web PHP; aquí solo se visualiza.
-  const cargarConstancias = useCallback(async () => {
+  // Reconocimientos: PDFs generados desde la web (Supabase Storage).
+  // Aquí solo contamos cuántos hay; el listado vive en ConstanciasScreen.
+  const cargarReconocimientos = useCallback(async () => {
     if (!usuario?.id_usuario) return;
     const { data, error } = await supabase
-      .from('inscripciones')
-      .select('id_inscripcion, id_evento, estado, eventos(titulo, fecha_hora_inicio)')
-      .eq('id_usuario', usuario.id_usuario)
-      .eq('estado', 'confirmada');
+      .from('reconocimientos')
+      .select('id_reconocimiento')
+      .eq('id_usuario', usuario.id_usuario);
 
     if (error) return;
-
-    const ahora = new Date();
-    const finalizados = (data ?? [])
-      .filter((i: any) => i.eventos && new Date(i.eventos.fecha_hora_inicio) < ahora)
-      .map((i: any) => ({
-        id_inscripcion: i.id_inscripcion,
-        id_evento: i.id_evento,
-        titulo: i.eventos.titulo,
-        fecha_hora_inicio: i.eventos.fecha_hora_inicio,
-      }));
-
-    setConstancias(finalizados);
+    setReconocimientos(data ?? []);
   }, [usuario?.id_usuario]);
 
-  const verConstancia = (item: ConstanciaItem) => {
-    // TODO: reemplazar TU-DOMINIO y el patrón por el endpoint real del compañero (web PHP)
-    const url = `https://TU-DOMINIO/constancia.php?id_inscripcion=${item.id_inscripcion}`;
-    WebBrowser.openBrowserAsync(url);
-  };
-
-  useEffect(() => { cargar(); cargarConstancias(); }, [cargar, cargarConstancias]);
+  useEffect(() => { cargar(); cargarReconocimientos(); }, [cargar, cargarReconocimientos]);
 
   const handleLike = async (post: PostItem) => {
     const nuevoEstado = !post.usuario_dio_like;
@@ -378,8 +356,8 @@ export default function PerfilScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Sección: Mis constancias — solo aparece si hay constancias disponibles */}
-      {constancias.length > 0 && (
+      {/* Un solo renglón: lleva a la pantalla con todos los reconocimientos */}
+      {reconocimientos.length > 0 && (
         <View style={styles.constanciasSection}>
           <TouchableOpacity
             style={styles.constanciasLink}
@@ -390,8 +368,10 @@ export default function PerfilScreen({ navigation }: any) {
               <Feather name="award" size={18} color="#E91E63" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.constanciaTitulo}>Mis constancias</Text>
-              <Text style={styles.constanciaFecha}>{constancias.length} disponible{constancias.length !== 1 ? 's' : ''}</Text>
+              <Text style={styles.constanciaTitulo}>Mis reconocimientos</Text>
+              <Text style={styles.constanciaFecha}>
+                {reconocimientos.length} disponible{reconocimientos.length !== 1 ? 's' : ''}
+              </Text>
             </View>
             <Feather name="chevron-right" size={18} color="#9E9E9E" />
           </TouchableOpacity>
@@ -428,7 +408,7 @@ export default function PerfilScreen({ navigation }: any) {
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(); cargarConstancias(); }} tintColor="#E91E63" />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(); cargarReconocimientos(); }} tintColor="#E91E63" />
           }
           ListEmptyComponent={
             <Text style={styles.emptyText}>Aún no has publicado nada.</Text>
@@ -507,12 +487,12 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: '#D32F2F', fontSize: 12, fontWeight: 'bold' },
   // Constancias
   constanciasSection: { paddingHorizontal: 20, marginBottom: 20 },
+  constanciasLink: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FCE4EC', borderWidth: 1, borderColor: '#F8BBD0', borderRadius: 12, padding: 12 },
   constanciasTitulo: { fontSize: 15, fontWeight: '700', color: '#212121', marginBottom: 10 },
   constanciaItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FCE4EC', borderWidth: 1, borderColor: '#F8BBD0', borderRadius: 12, padding: 12, marginBottom: 10 },
   constanciaIconWrapper: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   constanciaTitulo: { fontSize: 13, fontWeight: '600', color: '#212121' },
   constanciaFecha: { fontSize: 11, color: '#9E9E9E', marginTop: 2 },
-  constanciasLink: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FCE4EC', borderWidth: 1, borderColor: '#F8BBD0', borderRadius: 12, padding: 12 },
   tabsContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#EEE', marginBottom: 15 },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderBottomColor: '#E91E63' },

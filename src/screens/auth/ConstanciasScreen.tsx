@@ -9,73 +9,65 @@ import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../services/supabase';
 import * as WebBrowser from 'expo-web-browser';
 
-interface ConstanciaItem {
-  id_inscripcion: number;
-  id_evento: number;
-  titulo: string;
-  fecha_hora_inicio: string;
+interface ReconocimientoItem {
+  id_reconocimiento: number;
+  nombre_destinatario: string;
+  descripcion: string;
+  evento: string;
+  fecha_evento: string;
+  url_pdf: string;
+  fecha_creacion: string;
 }
 
 export default function ConstanciasScreen({ navigation }: any) {
   const { usuario } = useAuth();
-  const [constancias, setConstancias] = useState<ConstanciaItem[]>([]);
+  const [reconocimientos, setReconocimientos] = useState<ReconocimientoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const cargarConstancias = useCallback(async () => {
+  const cargarReconocimientos = useCallback(async () => {
     if (!usuario?.id_usuario) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
+
+    // La RLS ya filtra por el usuario autenticado; filtramos también
+    // explícitamente por claridad.
     const { data, error } = await supabase
-      .from('inscripciones')
-      .select('id_inscripcion, id_evento, estado, eventos(titulo, fecha_hora_inicio)')
+      .from('reconocimientos')
+      .select('id_reconocimiento, nombre_destinatario, descripcion, evento, fecha_evento, url_pdf, fecha_creacion')
       .eq('id_usuario', usuario.id_usuario)
-      .eq('estado', 'confirmada');
+      .order('fecha_creacion', { ascending: false });
 
     if (!error) {
-      const ahora = new Date();
-      const finalizados = (data ?? [])
-        .filter((i: any) => i.eventos && new Date(i.eventos.fecha_hora_inicio) < ahora)
-        .map((i: any) => ({
-          id_inscripcion: i.id_inscripcion,
-          id_evento: i.id_evento,
-          titulo: i.eventos.titulo,
-          fecha_hora_inicio: i.eventos.fecha_hora_inicio,
-        }))
-        // Más recientes primero
-        .sort((a: ConstanciaItem, b: ConstanciaItem) =>
-          new Date(b.fecha_hora_inicio).getTime() - new Date(a.fecha_hora_inicio).getTime()
-        );
-      setConstancias(finalizados);
+      setReconocimientos(data ?? []);
     }
     setLoading(false);
     setRefreshing(false);
   }, [usuario?.id_usuario]);
 
-  useEffect(() => { cargarConstancias(); }, [cargarConstancias]);
+  useEffect(() => { cargarReconocimientos(); }, [cargarReconocimientos]);
 
-  const verConstancia = (item: ConstanciaItem) => {
-    // TODO: reemplazar TU-DOMINIO y el patrón por el endpoint real del compañero (web PHP)
-    const url = `https://TU-DOMINIO/constancia.php?id_inscripcion=${item.id_inscripcion}`;
-    WebBrowser.openBrowserAsync(url);
+  const verReconocimiento = (item: ReconocimientoItem) => {
+    // El visor de Google renderiza el PDF en pantalla en vez de descargarlo
+    const visor = `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(item.url_pdf)}`;
+    WebBrowser.openBrowserAsync(visor);
   };
 
-  const renderItem = ({ item }: { item: ConstanciaItem }) => (
+  const renderItem = ({ item }: { item: ReconocimientoItem }) => (
     <TouchableOpacity
       style={styles.item}
-      onPress={() => verConstancia(item)}
+      onPress={() => verReconocimiento(item)}
       activeOpacity={0.7}
     >
       <View style={styles.iconWrapper}>
         <Feather name="award" size={20} color="#E91E63" />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.itemTitulo} numberOfLines={2}>{item.titulo}</Text>
-        <Text style={styles.itemFecha}>
-          {new Date(item.fecha_hora_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
-        </Text>
+        <Text style={styles.itemTitulo} numberOfLines={2}>{item.evento}</Text>
+        <Text style={styles.itemDescripcion} numberOfLines={1}>{item.descripcion}</Text>
+        <Text style={styles.itemFecha}>{item.fecha_evento}</Text>
       </View>
       <Feather name="chevron-right" size={20} color="#9E9E9E" />
     </TouchableOpacity>
@@ -87,7 +79,7 @@ export default function ConstanciasScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Feather name="arrow-left" size={24} color="#212121" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mis constancias</Text>
+        <Text style={styles.headerTitle}>Mis reconocimientos</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -95,19 +87,25 @@ export default function ConstanciasScreen({ navigation }: any) {
         <ActivityIndicator size="large" color="#E91E63" style={{ marginTop: 60 }} />
       ) : (
         <FlatList
-          data={constancias}
-          keyExtractor={item => String(item.id_inscripcion)}
+          data={reconocimientos}
+          keyExtractor={item => String(item.id_reconocimiento)}
           renderItem={renderItem}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargarConstancias(); }} tintColor="#E91E63" />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); cargarReconocimientos(); }}
+              tintColor="#E91E63"
+            />
           }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Feather name="award" size={48} color="#E0E0E0" />
-              <Text style={styles.emptyText}>Aún no tienes constancias disponibles.</Text>
-              <Text style={styles.emptySub}>Las constancias aparecen cuando un evento en el que participaste finaliza.</Text>
+              <Text style={styles.emptyText}>Aún no tienes reconocimientos.</Text>
+              <Text style={styles.emptySub}>
+                Aquí aparecerán los reconocimientos que se te otorguen por participar como ponente.
+              </Text>
             </View>
           }
         />
@@ -125,7 +123,8 @@ const styles = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FCE4EC', borderWidth: 1, borderColor: '#F8BBD0', borderRadius: 12, padding: 14, marginBottom: 12 },
   iconWrapper: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   itemTitulo: { fontSize: 14, fontWeight: '600', color: '#212121' },
-  itemFecha: { fontSize: 12, color: '#9E9E9E', marginTop: 3 },
+  itemDescripcion: { fontSize: 12, color: '#616161', marginTop: 2 },
+  itemFecha: { fontSize: 11, color: '#9E9E9E', marginTop: 3 },
   empty: { alignItems: 'center', marginTop: 60, paddingHorizontal: 40 },
   emptyText: { textAlign: 'center', color: '#616161', fontSize: 15, fontWeight: '600', marginTop: 16 },
   emptySub: { textAlign: 'center', color: '#9E9E9E', fontSize: 13, marginTop: 8, lineHeight: 19 },
