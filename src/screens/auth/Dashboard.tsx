@@ -292,7 +292,7 @@ export default function Dashboard({ navigation }: any) {
           <TouchableOpacity
             key={arch.id}
             style={styles.fileCard}
-            onPress={() => abrirUrl(arch.url)}
+            onPress={() => abrirUrl(`${arch.url}?download=${encodeURIComponent(arch.nombre || nombreArchivoDesdeUrl(arch.url))}`)}
             activeOpacity={0.7}
           >
             <View style={styles.fileIconWrapper}>
