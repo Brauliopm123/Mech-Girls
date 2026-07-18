@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -108,16 +108,30 @@ export default function ComentariosScreen({ route, navigation }: any) {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
     });
 
+  const irAPerfil = (idUsuario: number, nombre: string, apellidos: string) => {
+    navigation.navigate('PerfilPublico', { idUsuario, nombre, apellidos });
+  };
+
   const renderComentario = ({ item }: { item: Comentario }) => (
     <View style={styles.comentario}>
-      <View style={styles.avatarSm}>
-        <Text style={styles.avatarSmText}>
-          {getInitials(item.user_name, item.user_last_name)}
-        </Text>
-      </View>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => irAPerfil(item.id_usuario, item.user_name, item.user_last_name)}
+      >
+        <View style={styles.avatarSm}>
+          <Text style={styles.avatarSmText}>
+            {getInitials(item.user_name, item.user_last_name)}
+          </Text>
+        </View>
+      </TouchableOpacity>
       <View style={styles.bubble}>
         <View style={styles.bubbleHead}>
-          <Text style={styles.bubbleName}>{item.user_name} {item.user_last_name}</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => irAPerfil(item.id_usuario, item.user_name, item.user_last_name)}
+          >
+            <Text style={styles.bubbleName}>{item.user_name} {item.user_last_name}</Text>
+          </TouchableOpacity>
           <Text style={styles.bubbleTime}>{formatFecha(item.fecha_comentario)}</Text>
         </View>
         <Text style={styles.bubbleText}>{item.contenido}</Text>
@@ -137,16 +151,26 @@ export default function ComentariosScreen({ route, navigation }: any) {
 
       <View style={styles.postPreview}>
         <View style={styles.postPreviewHead}>
-          <View style={styles.avatarMd}>
-            <Text style={styles.avatarMdText}>
-              {getInitials(publicacion.user_name, publicacion.user_last_name)}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.postAuthor}>
-              {publicacion.user_name} {publicacion.user_last_name}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={styles.postAuthorTouch}
+            activeOpacity={0.7}
+            onPress={() => irAPerfil(publicacion.id_usuario, publicacion.user_name, publicacion.user_last_name)}
+          >
+            {publicacion.user_foto ? (
+              <Image source={{ uri: publicacion.user_foto }} style={styles.avatarMdImg} />
+            ) : (
+              <View style={styles.avatarMd}>
+                <Text style={styles.avatarMdText}>
+                  {getInitials(publicacion.user_name, publicacion.user_last_name)}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.postAuthor}>
+                {publicacion.user_name} {publicacion.user_last_name}
+              </Text>
+            </View>
+          </TouchableOpacity>
           <View style={styles.tagChip}>
             <Text style={styles.tagChipText}>{publicacion.tag}</Text>
           </View>
@@ -236,7 +260,9 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
   postPreview: { margin: 16, padding: 14, backgroundColor: '#FFF', borderRadius: 14, borderWidth: 0.5, borderColor: '#E8E0F0' },
   postPreviewHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  postAuthorTouch: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatarMd: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E83E8C', alignItems: 'center', justifyContent: 'center' },
+  avatarMdImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8F7FC' },
   avatarMdText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   postAuthor: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
   tagChip: { backgroundColor: '#FBEAF0', borderWidth: 0.5, borderColor: '#F4C0D1', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },

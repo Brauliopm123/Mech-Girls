@@ -273,15 +273,28 @@ export default function Dashboard({ navigation }: any) {
     const fecha = new Date(item.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
     return (
       <View style={styles.card}>
-        <View style={styles.postHeader}>
-          <View style={[styles.avatar, { backgroundColor: Colors.primary }]}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+        <TouchableOpacity
+          style={styles.postHeader}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('PerfilPublico', {
+            idUsuario: item.id_usuario,
+            nombre: item.user_name,
+            apellidos: item.user_last_name,
+            foto: item.user_foto,
+          })}
+        >
+          {item.user_foto ? (
+            <Image source={{ uri: item.user_foto }} style={styles.avatarImg} />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: Colors.primary }]}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+          )}
           <View style={styles.postHeaderText}>
             <Text style={styles.userName}>{fullName}</Text>
             <Text style={styles.postDate}>{fecha}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.postContent}>{item.content}</Text>
 
         {item.archivos?.filter(a => a.tipo === 'imagen').map(img => (
@@ -470,6 +483,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: 16, padding: 16, marginBottom: 15 },
   postHeader: { flexDirection: 'row', marginBottom: 12 },
   avatar: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarImg: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: Colors.surface },
   avatarText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
   postHeaderText: { flex: 1 },
   userName: { fontWeight: '700', fontSize: 15, color: Colors.text, marginBottom: 2 },
