@@ -171,6 +171,21 @@ export default function AdminScreen() {
     );
   };
 
+  // Cierra el modal y luego navega al perfil público de esa usuaria.
+  // El setTimeout es necesario: en iOS, navegar con un Modal pageSheet aún
+  // montado deja la pantalla nueva atrapada detrás del modal.
+  const verPublicaciones = (u: UsuarioAdmin) => {
+    setModalUsuario(null);
+    setTimeout(() => {
+      navigation.navigate('PerfilPublico', {
+        idUsuario: u.id_usuario,
+        nombre: u.nombre,
+        apellidos: u.apellidos,
+        foto: null,
+      });
+    }, 300);
+  };
+
   const renderUsuario = ({ item }: { item: UsuarioAdmin }) => {
     const rolColor = ROL_COLORS[item.nombre_rol] ?? { bg: '#F5F5F5', text: '#757575', border: '#E0E0E0' };
     const initials = `${item.nombre.charAt(0)}${item.apellidos.charAt(0)}`.toUpperCase() || item.correo.charAt(0).toUpperCase();
@@ -307,6 +322,22 @@ export default function AdminScreen() {
                 </Text>
               </View>
 
+              {/* Ver publicaciones de esta usuaria */}
+              <TouchableOpacity
+                style={styles.btnVerPublicaciones}
+                onPress={() => verPublicaciones(modalUsuario)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.verPubIconWrapper}>
+                  <Feather name="grid" size={18} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.verPubTitulo}>Ver publicaciones</Text>
+                  <Text style={styles.verPubSubtitulo}>Revisar su actividad en el feed</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
+
               {/* Cambiar rol */}
               <Text style={styles.seccionTitle}>Rol asignado</Text>
               <View style={styles.rolesGrid}>
@@ -412,6 +443,18 @@ const styles = StyleSheet.create({
   modalCorreo: { fontSize: 13, color: Colors.textSecondary, marginBottom: 4 },
   modalFecha: { fontSize: 11, color: Colors.textMuted },
   seccionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textMuted, marginBottom: 10, marginTop: 8 },
+  btnVerPublicaciones: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 14, marginBottom: 18,
+    backgroundColor: Colors.primaryPale, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.primaryBorder,
+  },
+  verPubIconWrapper: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF',
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  verPubTitulo: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  verPubSubtitulo: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   rolesGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   rolOpcion: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
   rolOpcionText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },

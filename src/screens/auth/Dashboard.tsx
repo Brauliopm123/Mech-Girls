@@ -368,7 +368,7 @@ export default function Dashboard({ navigation }: any) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('../../assets/logo_mech-girls.jpeg')} style={styles.headerLogo} resizeMode="cover" />
-          <Text style={styles.headerTitle}>MECH <Text style={{ color: Colors.primary }}>GIRLS</Text></Text>
+          {/*<Text style={styles.headerTitle}>MECH <Text style={{ color: Colors.primary }}>GIRLS</Text></Text>*/}
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.bellWrapper} onPress={() => { setShowNotifications(true); }}>
