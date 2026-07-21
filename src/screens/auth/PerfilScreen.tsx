@@ -78,6 +78,7 @@ export default function PerfilScreen({ navigation }: any) {
   const [apellidosEdit, setApellidosEdit] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [reconocimientos, setReconocimientos] = useState<ReconocimientoRef[]>([]);
+  const [enlaces, setEnlaces] = useState<{ sitio_web_url?: string | null; linkedin_url?: string | null; github_url?: string | null }>({});
 
   const { usuario, logout, esAlumna, esPonente } = useAuth();
 
@@ -123,6 +124,16 @@ export default function PerfilScreen({ navigation }: any) {
         publicaciones: pubData?.length ?? 0,
         talleres: talleres ?? 0,
       });
+
+      // Enlaces del perfil (sitio web para ponente; LinkedIn/GitHub para alumna)
+      const tabla = esPonente?.() ? 'perfiles_ponente' : 'perfiles_alumna';
+      const cols = esPonente?.() ? 'sitio_web_url' : 'linkedin_url, github_url';
+      const { data: perfilData } = await supabase
+        .from(tabla)
+        .select(cols)
+        .eq('id_usuario', usuario.id_usuario)
+        .maybeSingle();
+      setEnlaces((perfilData as any) ?? {});
     } catch (err: any) {
       console.error(err.message);
     } finally {
@@ -165,8 +176,11 @@ export default function PerfilScreen({ navigation }: any) {
 
   const handleCompartir = async () => {
     try {
+      const enlacePerfil = `mechgirls://perfil/${usuario?.id_usuario}`;
       await Share.share({
-        message: `¡Conoce el perfil de ${fullName} en Mech Girls — Mujeres Mecatrónicas!`,
+        message:
+          `Conoce el perfil de ${fullName} en Mech Girls — Mujeres Mecatrónicas.\n\n` +
+          `Ábrelo directamente en la app (necesitas tenerla instalada):\n${enlacePerfil}`,
         title: 'Mech Girls',
       });
     } catch (err: any) {
@@ -206,7 +220,9 @@ export default function PerfilScreen({ navigation }: any) {
 
   const abrirUrl = async (url: string) => {
     try {
-      await Linking.openURL(url);
+      const limpio = url.trim();
+      const final = /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
+      await Linking.openURL(final);
     } catch {
       console.log('No se pudo abrir la URL:', url);
     }
@@ -356,6 +372,30 @@ export default function PerfilScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
+      {/* Enlaces */}
+      {(enlaces.linkedin_url || enlaces.github_url || enlaces.sitio_web_url) ? (
+        <View style={styles.linksSection}>
+          {enlaces.linkedin_url ? (
+            <TouchableOpacity style={styles.socialLink} onPress={() => abrirUrl(enlaces.linkedin_url!)} activeOpacity={0.7}>
+              <Feather name="linkedin" size={16} color="#E91E63" />
+              <Text style={styles.socialLinkText}>LinkedIn</Text>
+            </TouchableOpacity>
+          ) : null}
+          {enlaces.github_url ? (
+            <TouchableOpacity style={styles.socialLink} onPress={() => abrirUrl(enlaces.github_url!)} activeOpacity={0.7}>
+              <Feather name="github" size={16} color="#E91E63" />
+              <Text style={styles.socialLinkText}>GitHub</Text>
+            </TouchableOpacity>
+          ) : null}
+          {enlaces.sitio_web_url ? (
+            <TouchableOpacity style={styles.socialLink} onPress={() => abrirUrl(enlaces.sitio_web_url!)} activeOpacity={0.7}>
+              <Feather name="globe" size={16} color="#E91E63" />
+              <Text style={styles.socialLinkText}>Sitio web</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
       {/* Un solo renglón: lleva a la pantalla con todos los reconocimientos */}
       {reconocimientos.length > 0 && (
         <View style={styles.constanciasSection}>
@@ -483,6 +523,9 @@ const styles = StyleSheet.create({
   actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 25, gap: 8 },
   actionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, borderColor: '#E91E63', backgroundColor: '#FFF', flex: 1 },
   actionButtonText: { color: '#E91E63', fontSize: 12, fontWeight: 'bold' },
+  linksSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 20, marginTop: 16, marginBottom: 20 },
+  socialLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#F4C0D1', backgroundColor: '#FBEAF0' },
+  socialLinkText: { fontSize: 13, fontWeight: '600', color: '#E91E63' },
   logoutButton: { borderColor: '#D32F2F', backgroundColor: '#FFEBEE' },
   logoutButtonText: { color: '#D32F2F', fontSize: 12, fontWeight: 'bold' },
   // Constancias

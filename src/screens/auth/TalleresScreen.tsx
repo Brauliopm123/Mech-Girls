@@ -610,6 +610,9 @@ export default function TalleresScreen({navigation}: any) {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Talleres</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.btnCalendario} onPress={() => navigation.navigate('Calendario')}>
+            <Feather name="calendar" size={16} color={Colors.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.btnPonentes} onPress={() => navigation.navigate('Ponentes')}>
             <Feather name="users" size={14} color={Colors.primary} />
             <Text style={styles.btnPonentesText}>Ponentes</Text>
@@ -695,6 +698,7 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
   btnPonentes: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  btnCalendario: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.primary, width: 32, height: 32, borderRadius: 16 },
   btnPonentesText: { color: Colors.primary, fontWeight: '600', fontSize: 12 },
   headerTitle: { fontSize: 22, fontWeight: '700', color: Colors.text },
   btnNuevo: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: Colors.primaryBorder },

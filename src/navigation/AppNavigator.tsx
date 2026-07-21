@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import AuthNavigator from './AuthNavigator';
@@ -10,6 +10,22 @@ import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 
 const RecoveryStack = createNativeStackNavigator();
+
+// Referencia global para navegar desde el manejador de deep links (fuera de las pantallas).
+export const navigationRef = createNavigationContainerRef();
+
+// Perfil pendiente de abrir por deep link (mechgirls://perfil/123).
+// Se guarda hasta que el navegador esté listo y la usuaria esté autenticada.
+let pendingPerfilId: number | null = null;
+
+function intentarAbrirPerfil() {
+  if (pendingPerfilId == null) return;
+  if (!navigationRef.isReady()) return;
+  if (!useAuthStore.getState().isAuthenticated) return; // aún no hay sesión: se abrirá al entrar
+  const id = pendingPerfilId;
+  pendingPerfilId = null;
+  (navigationRef.navigate as any)('PerfilPublico', { idUsuario: id });
+}
 
 function RecoveryNavigator() {
   return (
@@ -30,6 +46,14 @@ function procesarUrl(url: string | null) {
   if (!url) return;
   if (url === urlProcesada) return;
   urlProcesada = url;
+
+  // Deep link de perfil: mechgirls://perfil/123  ó  .../perfil/123
+  const perfilMatch = url.match(/perfil\/(\d+)/);
+  if (perfilMatch) {
+    pendingPerfilId = parseInt(perfilMatch[1], 10);
+    intentarAbrirPerfil();
+    return;
+  }
 
   let paramString = '';
   const hashIndex = url.indexOf('#');
@@ -78,6 +102,11 @@ export default function AppNavigator() {
     return () => sub.remove();
   }, []);
 
+  // Si el link de perfil llegó antes de iniciar sesión, ábrelo al autenticarse.
+  useEffect(() => {
+    if (isAuthenticated) intentarAbrirPerfil();
+  }, [isAuthenticated]);
+
   if (isLoading) {
     return (
       <View style={styles.loading}>
@@ -87,7 +116,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={intentarAbrirPerfil}>
       {enRecuperacion
         ? <RecoveryNavigator key="recovery" />
         : isAuthenticated

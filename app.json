@@ -5,9 +5,14 @@
     "version": "1.0.0",
     "userInterfaceStyle": "light",
     "scheme": "mechgirls",
+    "icon": "./assets/icon.png",
     "android": {
       "googleServicesFile": "./google-services.json",
       "package": "com.anonymous.mechgirlsapp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4E2F41"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
@@ -22,10 +27,12 @@
           ]
         }
       ]
-      
     },
     "ios": {
       "bundleIdentifier": "com.mechgirls.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {

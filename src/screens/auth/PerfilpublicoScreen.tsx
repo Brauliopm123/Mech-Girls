@@ -196,7 +196,11 @@ export default function PerfilPublicoScreen({ route, navigation }: any) {
   };
 
   const abrirUrl = async (url: string) => {
-    try { await Linking.openURL(url); } catch { console.log('No se pudo abrir la URL:', url); }
+    try {
+      const limpio = url.trim();
+      const final = /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
+      await Linking.openURL(final);
+    } catch { console.log('No se pudo abrir la URL:', url); }
   };
 
   const nombreArchivoDesdeUrl = (url: string) => {
